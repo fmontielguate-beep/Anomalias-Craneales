@@ -7,15 +7,20 @@ export async function generateCurriculum(
   sourceContent: string,
   mediaFile?: FileData
 ): Promise<Curriculum> {
+  // Inicializamos dentro de la función para asegurar el uso de la API Key más reciente
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const modelName = 'gemini-3-flash-preview';
+  // Usamos Pro para tareas de razonamiento complejo sobre documentos
+  const modelName = 'gemini-3-pro-preview';
 
-  const userPrompt = `Analiza el material sobre "${topic}". 
-  Extrae los conceptos fundamentales y organízalos en una secuencia de aprendizaje de 5 capítulos.
-  ${sourceContent ? `Usa también este texto: ${sourceContent}` : ''}`;
+  const userPrompt = `Analiza detenidamente el material adjunto sobre "${topic}". 
+  Tu objetivo es diseñar un plan de estudios de 5 capítulos para un juego educativo. 
+  Cada capítulo debe cubrir un área temática distinta del material.
+  ${sourceContent ? `También considera este texto: ${sourceContent}` : ''}`;
 
   try {
-    const parts: any[] = [{ text: userPrompt }];
+    const parts: any[] = [];
+    
+    // IMPORTANTE: Primero enviamos el archivo para que la IA lo cargue en su memoria de contexto
     if (mediaFile) {
       parts.push({
         inlineData: {
@@ -25,11 +30,14 @@ export async function generateCurriculum(
       });
     }
 
+    // Luego enviamos las instrucciones
+    parts.push({ text: userPrompt });
+
     const response = await ai.models.generateContent({
       model: modelName,
       contents: [{ parts }],
       config: {
-        systemInstruction: "Eres un experto en pedagogía. Analiza el archivo adjunto y genera un currículo educativo de 5 capítulos en JSON.",
+        systemInstruction: "Eres un experto en pedagogía y gamificación. Tu misión es transformar documentos en currículos educativos estructurados en JSON. Sé creativo y preciso.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -55,11 +63,14 @@ export async function generateCurriculum(
     });
 
     const result = JSON.parse(response.text || "{}");
-    if (!result.chapters) throw new Error("Respuesta incompleta");
+    if (!result.chapters || result.chapters.length === 0) {
+      throw new Error("La IA no pudo extraer capítulos del material.");
+    }
     return result;
   } catch (error: any) {
-    console.error("Critical Curriculum Error:", error);
-    throw error;
+    console.error("Error en generateCurriculum:", error);
+    // Propagamos el error real para mostrarlo en la UI
+    throw new Error(error.message || "Fallo desconocido en la IA");
   }
 }
 
@@ -71,14 +82,16 @@ export async function generateChapterLevels(
   isTrialMode: boolean = false
 ): Promise<GameLevel[]> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const modelName = 'gemini-3-flash-preview';
-  const numLevels = isTrialMode ? 3 : 5;
+  const modelName = 'gemini-3-pro-preview';
+  const numLevels = isTrialMode ? 2 : 4;
 
-  const userPrompt = `Basándote en el material adjunto, genera ${numLevels} preguntas de opción múltiple sobre "${chapter.title}".
-  Los temas a cubrir son: ${chapter.topics.join(", ")}.`;
+  const userPrompt = `Basándote en el material adjunto, genera ${numLevels} preguntas de examen tipo escape room para el capítulo: "${chapter.title}".
+  Temas específicos a evaluar: ${chapter.topics.join(", ")}.
+  Crea acertijos que requieran haber leído el material.`;
 
   try {
-    const parts: any[] = [{ text: userPrompt }];
+    const parts: any[] = [];
+    
     if (mediaFile) {
       parts.push({
         inlineData: {
@@ -88,11 +101,13 @@ export async function generateChapterLevels(
       });
     }
 
+    parts.push({ text: userPrompt });
+
     const response = await ai.models.generateContent({
       model: modelName,
       contents: [{ parts }],
       config: {
-        systemInstruction: `Eres un diseñador de acertijos para un escape room. Crea ${numLevels} niveles desafiantes.`,
+        systemInstruction: `Diseña un juego de escape room. Debes generar exactamente ${numLevels} niveles en formato JSON.`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -116,9 +131,10 @@ export async function generateChapterLevels(
       }
     });
 
-    return JSON.parse(response.text || "[]");
+    const levels = JSON.parse(response.text || "[]");
+    return Array.isArray(levels) ? levels : [];
   } catch (error: any) {
-    console.error("Critical Levels Error:", error);
-    throw error;
+    console.error("Error en generateChapterLevels:", error);
+    throw new Error(error.message || "Fallo al generar preguntas");
   }
 }

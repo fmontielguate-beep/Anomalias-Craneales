@@ -58,19 +58,24 @@ const App: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 15 * 1024 * 1024) {
-      setError("El archivo supera los 15MB. Prueba con uno más ligero.");
+    if (file.size > 20 * 1024 * 1024) {
+      setError("El archivo es demasiado grande (Límite 20MB).");
       return;
     }
 
     const reader = new FileReader();
     reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(',')[1];
-      setSelectedFileData({ data: base64, mimeType: file.type });
-      setTopic(file.name.replace(/\.[^/.]+$/, ""));
-      setError('');
+      try {
+        const result = reader.result as string;
+        const base64 = result.split(',')[1];
+        setSelectedFileData({ data: base64, mimeType: file.type });
+        setTopic(file.name.replace(/\.[^/.]+$/, ""));
+        setError('');
+      } catch (e) {
+        setError("Fallo al procesar el archivo localmente.");
+      }
     };
+    reader.onerror = () => setError("Error de lectura del archivo.");
     reader.readAsDataURL(file);
   };
 
@@ -82,7 +87,7 @@ const App: React.FC = () => {
 
     try {
       const syllabus = await generateCurriculum(
-        topic || "Aventura de Aprendizaje",
+        topic || "Desafío",
         inputValue,
         selectedFileData || undefined
       );
@@ -96,8 +101,9 @@ const App: React.FC = () => {
       setTopic(syllabus.topic);
       setStatus(AppStatus.CURRICULUM_MAP);
     } catch (err: any) {
-      console.error("Error en App:", err);
-      setError("La IA no pudo procesar este archivo específico. Intenta con un PDF que tenga más texto o sea más claro.");
+      console.error("Error Detallado:", err);
+      // MOSTRAMOS EL ERROR TÉCNICO REAL para saber qué pasa con la API
+      setError(`Error de la IA: ${err.message || "Fallo en la conexión"}. Intenta de nuevo.`);
       setStatus(AppStatus.IDLE);
     } finally {
       setIsProcessing(false);
@@ -120,19 +126,18 @@ const App: React.FC = () => {
         isTrialMode
       );
       
-      if (!chapterLevels || chapterLevels.length === 0) throw new Error("Vacío");
+      if (!chapterLevels || chapterLevels.length === 0) throw new Error("La IA no generó preguntas.");
       
       setLevels(chapterLevels);
       setStatus(AppStatus.PREVIEW);
     } catch (err: any) {
-      setError("Error al construir la sala. Por favor, reintenta.");
+      setError(`Fallo al crear la sala: ${err.message}`);
       setStatus(AppStatus.CURRICULUM_MAP);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // El resto de la UI se mantiene igual para conservar la estética
   if (status === AppStatus.AUTH) {
     return (
       <ScreenWrapper className="items-center justify-center bg-[#F7FFF7] p-6">
@@ -141,7 +146,7 @@ const App: React.FC = () => {
             <i className="fas fa-magic text-white text-3xl"></i>
           </div>
           <h2 className="text-4xl font-fredoka font-black text-[#FF6B6B] mb-2 uppercase tracking-tighter">EduEscape</h2>
-          <p className="text-[#4ECDC4] font-bold text-sm mb-8 italic">¡Aprender es ganar!</p>
+          <p className="text-[#4ECDC4] font-bold text-sm mb-8 italic">Aprender es la aventura</p>
           
           {!showPasswordPrompt ? (
             <div className="space-y-4">
@@ -149,19 +154,19 @@ const App: React.FC = () => {
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
                 const userData: UserProfile = {
-                  fullName: formData.get('fullName') as string,
-                  medicalId: formData.get('medicalId') as string,
+                  fullName: (formData.get('fullName') as string) || "Explorador",
+                  medicalId: (formData.get('medicalId') as string) || "000",
                   specialtyPreference: 'Estudiante',
                 };
                 setUser(userData);
                 localStorage.setItem('edu_escape_user', JSON.stringify(userData));
                 setStatus(AppStatus.IDLE);
               }} className="space-y-4 text-left">
-                <input name="fullName" required placeholder="Tu Nombre" className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none" />
-                <input name="medicalId" required placeholder="ID de Usuario" className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none" />
-                <Button type="submit" className="w-full py-5 text-xl btn-joy bg-[#FF6B6B] text-white uppercase font-black">ENTRAR</Button>
+                <input name="fullName" required placeholder="Tu Nombre" className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-[#FF6B6B] transition-all" />
+                <input name="medicalId" required placeholder="ID Usuario" className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-[#FF6B6B] transition-all" />
+                <Button type="submit" className="w-full py-5 text-xl btn-joy bg-[#FF6B6B] text-white uppercase font-black">EMPEZAR</Button>
               </form>
-              <button onClick={() => setShowPasswordPrompt(true)} className="w-full text-[#6C5CE7] font-black uppercase text-[11px] tracking-widest mt-4">MODO INVITADO</button>
+              <button onClick={() => setShowPasswordPrompt(true)} className="w-full text-[#6C5CE7] font-black uppercase text-[10px] tracking-widest mt-4">ACCESO INVITADO</button>
             </div>
           ) : (
             <form onSubmit={(e) => {
@@ -173,11 +178,12 @@ const App: React.FC = () => {
                 setStatus(AppStatus.IDLE);
                 setShowPasswordPrompt(false);
               } else {
-                setError('Código incorrecto.');
+                setError('Código de acceso incorrecto.');
+                setTrialPassword('');
               }
             }} className="space-y-6 text-left">
               <div className="p-6 bg-white rounded-[2rem] border-4 border-[#6C5CE7]">
-                <input type="password" autoFocus required value={trialPassword} onChange={(e) => setTrialPassword(e.target.value)} placeholder="Código..." className="w-full bg-transparent border-none text-center text-xl font-black outline-none" />
+                <input type="password" autoFocus required value={trialPassword} onChange={(e) => setTrialPassword(e.target.value)} placeholder="Clave..." className="w-full bg-transparent border-none text-center text-xl font-black outline-none" />
               </div>
               <div className="flex gap-4">
                 <Button type="submit" className="flex-grow py-5 font-black btn-joy bg-[#6C5CE7] text-white uppercase">VALIDAR</Button>
@@ -193,27 +199,27 @@ const App: React.FC = () => {
   if (status === AppStatus.IDLE) {
     return (
       <ScreenWrapper className="items-center justify-center p-6 bg-transparent">
-        <div className="max-w-4xl w-full h-full max-h-[90vh] glass p-8 md:p-12 rounded-[5rem] flex flex-col relative overflow-hidden shadow-2xl border-4 border-white">
+        <div className="max-w-4xl w-full h-full max-h-[90vh] glass p-8 md:p-12 rounded-[5rem] flex flex-col relative overflow-hidden shadow-2xl border-4 border-white animate-in slide-in-from-bottom-12 duration-500">
           <div className="flex justify-between items-center mb-8 relative z-50">
              <div className="bg-white px-4 py-2 rounded-full shadow-sm border-2 border-slate-100 flex items-center gap-2">
                <div className="w-4 h-4 rounded-full bg-[#4ECDC4]"></div>
                <span className="text-[11px] text-[#6C5CE7] font-black uppercase tracking-widest">{user?.fullName}</span>
              </div>
-             <button onClick={logout} className="text-slate-300 font-black text-[10px] uppercase">SALIR</button>
+             <button onClick={logout} className="text-slate-300 font-black text-[10px] uppercase hover:text-red-400">CERRAR SESIÓN</button>
           </div>
 
-          <div className="text-center mb-8">
+          <div className="text-center mb-8 flex-shrink-0">
             <h1 className="text-6xl md:text-7xl font-cinzel font-black shimmer-text leading-none mb-2">EduEscape</h1>
-            <p className="text-slate-400 text-base font-bold italic">Carga un PDF, Video o Texto para comenzar.</p>
+            <p className="text-slate-400 text-base font-bold italic">Sube tu PDF para crear el escape room.</p>
           </div>
 
-          <form onSubmit={handleCreateCurriculum} className="flex-grow flex flex-col justify-center space-y-8 max-w-2xl mx-auto w-full relative z-10">
+          <form onSubmit={handleCreateCurriculum} className="flex-grow flex flex-col justify-center space-y-8 max-w-2xl mx-auto w-full relative z-10 overflow-hidden">
             <div className="flex justify-center gap-3">
               {(['pdf', 'video', 'text'] as SourceType[]).map((type) => (
                 <button 
                   key={type} 
                   type="button" 
-                  onClick={() => { setSourceType(type); setSelectedFileData(null); setError(''); }}
+                  onClick={() => { setSourceType(type); setSelectedFileData(null); setError(''); setTopic(''); }}
                   className={`px-6 py-2 rounded-2xl font-black text-[10px] border-4 transition-all ${sourceType === type ? 'bg-[#FF6B6B] border-white text-white shadow-lg' : 'bg-white border-slate-100 text-slate-300'}`}
                 >
                   {type.toUpperCase()}
@@ -221,24 +227,24 @@ const App: React.FC = () => {
               ))}
             </div>
 
-            <div className="flex-grow flex flex-col min-h-[200px]">
+            <div className="flex-grow overflow-hidden flex flex-col min-h-[250px]">
               {sourceType !== 'text' ? (
-                <div onClick={() => fileInputRef.current?.click()} className="group flex-grow border-4 border-dashed border-[#F7FFF7] rounded-[3rem] p-8 text-center cursor-pointer hover:border-[#4ECDC4] bg-white shadow-inner flex flex-col items-center justify-center">
+                <div onClick={() => fileInputRef.current?.click()} className="group flex-grow border-4 border-dashed border-[#F7FFF7] rounded-[3rem] p-8 text-center cursor-pointer hover:border-[#4ECDC4] bg-white shadow-inner flex flex-col items-center justify-center transition-all">
                   <input type="file" ref={fileInputRef} className="hidden" accept={sourceType === 'pdf' ? ".pdf" : "video/*"} onChange={handleFileChange} />
-                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 ${sourceType === 'pdf' ? 'bg-[#6C5CE7]' : 'bg-[#4ECDC4]'} text-white shadow-lg`}>
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg ${sourceType === 'pdf' ? 'bg-[#6C5CE7]' : 'bg-[#4ECDC4]'} text-white`}>
                     <i className={`fas ${sourceType === 'pdf' ? 'fa-file-pdf' : 'fa-video'} text-2xl`}></i>
                   </div>
-                  <p className="text-xl font-black text-slate-800">{topic || `Selecciona tu ${sourceType}`}</p>
+                  <p className="text-xl font-black text-slate-800 line-clamp-2 px-4">{topic || `Cargar ${sourceType.toUpperCase()}`}</p>
                 </div>
               ) : (
-                <textarea required value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="Pega el contenido aquí..." className="flex-grow bg-[#F7FFF7] border-2 border-white rounded-[2rem] px-6 py-4 text-lg shadow-inner outline-none" />
+                <textarea required value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="Pega el texto aquí..." className="flex-grow bg-[#F7FFF7] border-2 border-white rounded-[2rem] px-6 py-4 text-lg shadow-inner outline-none focus:border-[#4ECDC4] transition-all resize-none font-medium" />
               )}
             </div>
 
-            <Button type="submit" disabled={isProcessing || (sourceType !== 'text' && !selectedFileData)} className="w-full py-6 text-2xl font-black rounded-[2rem] bg-[#FF6B6B] text-white shadow-xl btn-joy">
-              {isProcessing ? "ANALIZANDO..." : "¡GENERAR JUEGO!"}
+            <Button type="submit" disabled={isProcessing || (sourceType !== 'text' && !selectedFileData)} className="w-full py-6 text-2xl font-black rounded-[2rem] bg-[#FF6B6B] text-white shadow-xl btn-joy flex-shrink-0">
+              {isProcessing ? "PROCESANDO..." : "¡CREAR MISIÓN!"}
             </Button>
-            {error && <p className="text-red-500 text-center text-xs font-black uppercase">{error}</p>}
+            {error && <div className="bg-red-50 p-3 rounded-xl border-2 border-red-100"><p className="text-red-500 text-center text-[11px] font-black uppercase leading-tight">{error}</p></div>}
           </form>
         </div>
       </ScreenWrapper>
@@ -247,30 +253,31 @@ const App: React.FC = () => {
 
   if (status === AppStatus.CURRICULUM_MAP && curriculum) {
     return (
-      <ScreenWrapper className="p-6">
+      <ScreenWrapper className="bg-transparent p-6">
         <div className="max-w-6xl w-full mx-auto h-full flex flex-col">
-          <header className="flex justify-between items-center mb-8">
+          <header className="flex justify-between items-center mb-8 flex-shrink-0 relative z-50">
             <div className="text-left">
-              <span className="bg-[#FFD93D] px-4 py-1 rounded-full font-black text-[10px] uppercase">MISIÓN ACTUAL</span>
-              <h1 className="text-4xl font-cinzel font-black text-slate-800 mt-2">{topic}</h1>
+              <span className="bg-[#FFD93D] px-4 py-1 rounded-full font-black text-[10px] uppercase shadow-sm">MAPA DE SALAS</span>
+              <h1 className="text-4xl md:text-5xl font-cinzel font-black text-slate-800 mt-2 truncate max-w-md">{topic}</h1>
             </div>
-            <Button onClick={() => setStatus(AppStatus.IDLE)} variant="secondary" className="text-xs">NUEVO MATERIAL</Button>
+            <Button onClick={() => setStatus(AppStatus.IDLE)} variant="secondary" className="rounded-xl px-4 py-3 font-black text-[10px] uppercase border-2 shadow-sm">NUEVO TEMA</Button>
           </header>
 
-          <div className="flex-grow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scroll">
+          <div className="flex-grow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scroll pb-6">
             {curriculum.chapters.map((chapter) => (
               <div 
                 key={chapter.id} 
                 onClick={() => startChapter(chapter)}
                 className={`group p-8 border-4 rounded-[3rem] transition-all relative flex flex-col h-full bg-white ${
-                  chapter.status === 'locked' ? 'opacity-40 grayscale cursor-not-allowed' : 'shadow-xl cursor-pointer hover:border-[#FF6B6B]'
+                  chapter.status === 'locked' ? 'opacity-40 grayscale cursor-not-allowed' : 'shadow-xl cursor-pointer hover:border-[#FF6B6B] hover:-translate-y-1'
                 }`}
               >
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl mb-4 ${chapter.status === 'completed' ? 'bg-[#4ECDC4] text-white' : 'bg-[#FF6B6B] text-white'}`}>
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl mb-4 shadow-sm ${chapter.status === 'completed' ? 'bg-[#4ECDC4] text-white' : 'bg-[#FF6B6B] text-white'}`}>
                   <i className={`fas ${chapter.status === 'locked' ? 'fa-lock' : 'fa-star'}`}></i>
                 </div>
-                <h3 className="text-xl font-black text-slate-800 mb-2">{chapter.title}</h3>
-                <p className="text-slate-400 font-bold italic text-sm flex-grow">{chapter.description}</p>
+                <h3 className="text-xl font-black text-slate-800 mb-2 leading-tight">{chapter.title}</h3>
+                <p className="text-slate-400 font-bold italic text-sm line-clamp-3 flex-grow">{chapter.description}</p>
+                {chapter.status === 'available' && <span className="text-[10px] font-black text-[#FF6B6B] text-right uppercase mt-4">ENTRAR <i className="fas fa-play ml-1"></i></span>}
               </div>
             ))}
           </div>
@@ -282,13 +289,18 @@ const App: React.FC = () => {
   if (status === AppStatus.PREVIEW && activeChapter) {
     return (
       <ScreenWrapper className="items-center justify-center p-6">
-        <div className="max-w-2xl w-full glass p-10 rounded-[5rem] text-center border-4 border-white shadow-2xl">
-           <div className="w-20 h-20 bg-[#FF6B6B] text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-xl">
+        <div className="max-w-2xl w-full glass p-10 md:p-16 rounded-[5rem] text-center border-4 border-white shadow-2xl animate-in zoom-in duration-500">
+           <div className="w-20 h-20 bg-[#FF6B6B] text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3">
               <i className="fas fa-scroll text-3xl"></i>
            </div>
-           <h2 className="text-4xl font-cinzel font-black text-slate-800 mb-6">{activeChapter.title}</h2>
-           <p className="text-slate-500 text-lg mb-10 italic">"{activeChapter.description}"</p>
-           <Button onClick={() => setStatus(AppStatus.PLAYING)} className="w-full py-6 bg-[#FF6B6B] text-white rounded-[2rem] shadow-xl uppercase font-black">ENTRAR A LA SALA</Button>
+           <h2 className="text-4xl md:text-5xl font-cinzel font-black text-slate-800 mb-6 leading-tight uppercase">{activeChapter.title}</h2>
+           <div className="bg-[#F7FFF7] p-8 rounded-[3rem] border-2 border-dashed border-[#4ECDC4]/30 mb-10">
+              <p className="text-slate-500 text-lg font-bold italic leading-relaxed">"{activeChapter.description}"</p>
+           </div>
+           <div className="flex flex-col gap-4">
+              <Button onClick={() => setStatus(AppStatus.PLAYING)} className="w-full py-6 text-2xl bg-[#FF6B6B] text-white rounded-[2rem] shadow-xl btn-joy uppercase font-black">¡EMPEZAR!</Button>
+              <button onClick={() => setStatus(AppStatus.CURRICULUM_MAP)} className="text-slate-400 font-black text-[11px] uppercase tracking-widest hover:text-[#6C5CE7]">VOLVER AL MAPA</button>
+           </div>
         </div>
       </ScreenWrapper>
     );
@@ -297,9 +309,17 @@ const App: React.FC = () => {
   if (status === AppStatus.PLAYING && activeChapter) {
     return (
       <ScreenWrapper className="bg-white">
-        <nav className="h-[70px] px-8 flex justify-between items-center border-b-4 border-[#F7FFF7]">
-          <h3 className="text-lg font-cinzel font-black text-slate-800">{activeChapter.title}</h3>
-          <button onClick={() => setStatus(AppStatus.CURRICULUM_MAP)} className="text-slate-400 font-black text-[10px] uppercase">MAPA</button>
+        <nav className="h-[80px] px-8 glass flex justify-between items-center flex-shrink-0 z-[100] border-b-4 border-[#F7FFF7]">
+          <div className="flex items-center gap-4">
+             <div className="w-10 h-10 bg-[#FF6B6B] rounded-xl flex items-center justify-center text-white shadow-lg rotate-3">
+               <i className="fas fa-rocket"></i>
+             </div>
+             <div>
+               <span className="text-[9px] text-[#4ECDC4] font-black uppercase tracking-widest">{topic}</span>
+               <h3 className="text-lg font-cinzel font-black text-slate-800 leading-none truncate">{activeChapter.title}</h3>
+             </div>
+          </div>
+          <button onClick={() => setStatus(AppStatus.CURRICULUM_MAP)} className="text-slate-400 font-black text-[10px] uppercase border-2 border-slate-50 px-4 py-2 rounded-xl">ABANDONAR</button>
         </nav>
         <div className="flex-grow overflow-hidden relative">
           <EscapeRoom levels={levels} onFinish={() => {
@@ -317,10 +337,10 @@ const App: React.FC = () => {
   }
 
   if (status === AppStatus.LOADING) return (
-    <ScreenWrapper className="items-center justify-center text-center bg-[#F7FFF7]">
-      <div className="w-16 h-16 border-8 border-[#FFE66D] border-t-[#FF6B6B] rounded-full animate-spin mb-8"></div>
-      <h2 className="text-3xl font-cinzel font-black text-[#FF6B6B] uppercase">CULTIVANDO EL SABER</h2>
-      <p className="text-[#4ECDC4] text-xs font-black uppercase tracking-[0.4em] animate-pulse">Analizando archivo...</p>
+    <ScreenWrapper className="items-center justify-center text-center p-12 bg-[#F7FFF7]">
+      <div className="w-20 h-20 border-8 border-[#FFE66D] border-t-[#FF6B6B] rounded-full animate-spin shadow-xl mb-8"></div>
+      <h2 className="text-4xl font-cinzel font-black text-[#FF6B6B] mb-2 uppercase">CREANDO TU AVENTURA</h2>
+      <p className="text-[#4ECDC4] text-xs font-black uppercase tracking-[0.4em] animate-pulse">Analizando material...</p>
     </ScreenWrapper>
   );
 
