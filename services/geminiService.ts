@@ -2,6 +2,29 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { GameLevel, FileData, Chapter, Curriculum } from "../types";
 
+const extractJSON = (text: string): string => {
+  // Elimina bloques de código markdown si existen
+  let clean = text.trim();
+  if (clean.includes('```')) {
+    const match = clean.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (match && match[1]) {
+      clean = match[1];
+    }
+  }
+  // Intenta encontrar el primer '{' y el último '}' o '[' y ']'
+  const firstBrace = clean.indexOf('{');
+  const lastBrace = clean.lastIndexOf('}');
+  const firstBracket = clean.indexOf('[');
+  const lastBracket = clean.lastIndexOf(']');
+
+  if (firstBrace !== -1 && lastBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    return clean.substring(firstBrace, lastBrace + 1);
+  } else if (firstBracket !== -1 && lastBracket !== -1) {
+    return clean.substring(firstBracket, lastBracket + 1);
+  }
+  return clean;
+};
+
 export async function generateCurriculum(
   topic: string,
   sourceContent: string,
@@ -12,26 +35,34 @@ export async function generateCurriculum(
   const modelName = 'gemini-3-flash-preview';
 
   const systemInstruction = `Eres un Experto en Gamificación Educativa. 
-  Tu tarea es desglosar el tema "${topic}" en un currículo de 6 capítulos para un juego de escape room educativo.
-  Analiza el contenido para extraer los pilares fundamentales del conocimiento.`;
+  Genera un currículo de exactamente 6 capítulos basado en el material proporcionado. 
+  Idioma: Español. 
+  Formato: JSON puro, sin explicaciones adicionales.`;
 
-  const userPrompt = `Genera un objeto JSON para un currículo sobre: ${topic}. 
-  Contexto: ${sourceContent}.
-  Campos: 
-  - topic: nombre del tema.
-  - chapters: array de 6 objetos con (id, title, description, topics: string[]).
-  
-  Responde solo JSON en español. NO incluyas markdown o bloques de código.`;
+  const userPrompt = `Analiza el tema "${topic}" y el contenido: "${sourceContent.substring(0, 10000)}".
+  Genera un objeto JSON con esta estructura:
+  {
+    "topic": "${topic}",
+    "chapters": [
+      { "id": 1, "title": "Título", "description": "Resumen", "topics": ["tema1", "tema2"] }
+    ]
+  }
+  Crea exactamente 6 capítulos.`;
 
   try {
+    const parts: any[] = [{ text: userPrompt }];
+    if (mediaFile) {
+      parts.push({
+        inlineData: {
+          data: mediaFile.data,
+          mimeType: mediaFile.mimeType
+        }
+      });
+    }
+
     const response = await ai.models.generateContent({
       model: modelName,
-      contents: [{ 
-        parts: [
-          { text: userPrompt },
-          ...(mediaFile ? [{ inlineData: { data: mediaFile.data, mimeType: mediaFile.mimeType } }] : [])
-        ] 
-      }],
+      contents: [{ parts }],
       config: {
         systemInstruction,
         responseMimeType: "application/json",
@@ -39,24 +70,11 @@ export async function generateCurriculum(
       }
     });
 
-    const cleanText = response.text?.trim().replace(/^```json/, '').replace(/```$/, '') || "{}";
-    const syllabus: Curriculum = JSON.parse(cleanText);
-
-    // Extract grounding URLs
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    if (groundingChunks && useSearch) {
-      const sources = groundingChunks
-        .filter((chunk: any) => chunk.web)
-        .map((chunk: any) => ({
-          title: chunk.web.title,
-          uri: chunk.web.uri
-        }));
-      syllabus.sources = sources;
-    }
-
-    return syllabus;
-  } catch (error) {
-    console.error("Gemini Service Error:", error);
+    const text = response.text || "";
+    const cleanJSON = extractJSON(text);
+    return JSON.parse(cleanJSON);
+  } catch (error: any) {
+    console.error("Critical Curriculum Error:", error);
     throw error;
   }
 }
@@ -73,28 +91,28 @@ export async function generateChapterLevels(
   const modelName = 'gemini-3-flash-preview';
   const numLevels = isTrialMode ? 5 : 8;
 
-  const systemInstruction = `Eres un Maestro de Acertijos de Cultura Universal. 
-  Genera EXACTAMENTE ${numLevels} niveles para el capítulo: "${chapter.title}".
-  
-  REGLAS DE SEGURIDAD PARA EL ACCESO AL APRENDIZAJE:
-  1. NIVEL 1 (GEOGRAFÍA O LITERATURA): Pregunta cultura general mundial. NO PDF.
-  2. NIVEL 2 (MÚSICA O ARTE): Pregunta historia del arte o música clásica. NO PDF.
-  3. NIVELES 3 en adelante: Preguntas técnicas sobre "${chapter.title}" usando el PDF.
-  
-  Idioma: Español. Responde SOLO JSON puro.`;
+  const systemInstruction = `Eres un Maestro de Acertijos. Genera un juego de escape room de ${numLevels} niveles.
+  Niveles 1-2: Cultura General.
+  Niveles 3-${numLevels}: Basados específicamente en el tema "${chapter.title}".
+  Idioma: Español. Formato: ARRAY JSON.`;
 
-  const userPrompt = `Genera un Array JSON de ${numLevels} niveles. 
-  Campos: id, category, scenicDescription, riddle, options(4), correctAnswer, hints(3), explanation, knowledgeSnippet, congratulationMessage.`;
+  const userPrompt = `Genera un array de ${numLevels} objetos JSON para el capítulo "${chapter.title}". 
+  Campos obligatorios por objeto: id, category, scenicDescription, riddle, options (4 strings), correctAnswer (debe coincidir exactamente con una opción), hints (3 strings), explanation, knowledgeSnippet, congratulationMessage.`;
 
   try {
+    const parts: any[] = [{ text: userPrompt }];
+    if (mediaFile) {
+      parts.push({
+        inlineData: {
+          data: mediaFile.data,
+          mimeType: mediaFile.mimeType
+        }
+      });
+    }
+
     const response = await ai.models.generateContent({
       model: modelName,
-      contents: [{ 
-        parts: [
-          { text: userPrompt },
-          ...(mediaFile ? [{ inlineData: { data: mediaFile.data, mimeType: mediaFile.mimeType } }] : [])
-        ] 
-      }],
+      contents: [{ parts }],
       config: {
         systemInstruction,
         responseMimeType: "application/json",
@@ -102,23 +120,17 @@ export async function generateChapterLevels(
       }
     });
 
-    const cleanText = response.text?.trim().replace(/^```json/, '').replace(/```$/, '') || "[]";
-    const levels: GameLevel[] = JSON.parse(cleanText);
-
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    if (groundingChunks && useSearch) {
-      const sources = groundingChunks
-        .filter((chunk: any) => chunk.web)
-        .map((chunk: any) => ({
-          title: chunk.web.title,
-          uri: chunk.web.uri
-        }));
-      levels.forEach(lvl => lvl.sources = sources);
+    const text = response.text || "";
+    const cleanJSON = extractJSON(text);
+    const levels = JSON.parse(cleanJSON);
+    
+    if (!Array.isArray(levels)) {
+       throw new Error("Formato de respuesta inválido: Se esperaba un Array.");
     }
 
     return levels;
-  } catch (error) {
-    console.error("Gemini Levels Error:", error);
+  } catch (error: any) {
+    console.error("Critical Levels Error:", error);
     throw error;
   }
 }
