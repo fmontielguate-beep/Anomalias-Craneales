@@ -8,10 +8,7 @@ export async function generateCurriculum(
   useSearch: boolean = false,
   mediaFile?: FileData
 ): Promise<Curriculum> {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API_KEY_MISSING");
-
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = 'gemini-3-flash-preview';
 
   const systemInstruction = `Eres un Experto en Gamificación Educativa. 
@@ -72,10 +69,7 @@ export async function generateChapterLevels(
   mediaFile?: FileData,
   isTrialMode: boolean = false
 ): Promise<GameLevel[]> {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API_KEY_MISSING");
-
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = 'gemini-3-flash-preview';
   const numLevels = isTrialMode ? 5 : 8;
 

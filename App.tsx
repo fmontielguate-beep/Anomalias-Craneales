@@ -11,18 +11,6 @@ const ScreenWrapper: React.FC<{ children: React.ReactNode, className?: string }>
   </div>
 );
 
-const ApiKeyOverlay: React.FC<{ onSelect: () => void, onClose: () => void }> = ({ onSelect, onClose }) => (
-  <div className="absolute inset-0 z-[200] bg-white/90 backdrop-blur-sm flex items-center justify-center p-6">
-    <div className="max-w-md w-full glass p-8 rounded-[3rem] text-center border-4 border-[#FF6B6B]/20 shadow-2xl">
-      <i className="fas fa-plug text-amber-500 text-4xl mb-4"></i>
-      <h3 className="text-2xl font-black text-slate-800 mb-2">Conexión Requerida</h3>
-      <p className="text-slate-500 mb-6 text-sm leading-relaxed">Para generar aventuras personalizadas con IA, necesitamos establecer una conexión segura con Google Cloud.</p>
-      <Button onClick={onSelect} className="w-full bg-[#FF6B6B] text-white py-4 uppercase font-black shadow-lg">CONFIGURAR CONEXIÓN</Button>
-      <button onClick={onClose} className="mt-4 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 transition-colors">CERRAR</button>
-    </div>
-  </div>
-);
-
 const App: React.FC = () => {
   const [status, setStatus] = useState<AppStatus>(AppStatus.AUTH);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -39,39 +27,25 @@ const App: React.FC = () => {
   const [error, setError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedFileData, setSelectedFileData] = useState<FileData | null>(null);
-  const [needsApiKey, setNeedsApiKey] = useState<boolean>(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const initApp = () => {
-      const savedUser = localStorage.getItem('edu_escape_user');
-      if (savedUser) {
-        try {
-          const userData = JSON.parse(savedUser);
-          setUser(userData);
-          setStatus(AppStatus.IDLE);
-          if (userData.medicalId === 'AUDIT-MODE') {
-            setIsGuestTrial(true);
-            setIsTrialMode(true);
-          }
-        } catch (e) {
-          localStorage.clear();
+    const savedUser = localStorage.getItem('edu_escape_user');
+    if (savedUser) {
+      try {
+        const userData = JSON.parse(savedUser);
+        setUser(userData);
+        setStatus(AppStatus.IDLE);
+        if (userData.medicalId === 'AUDIT-MODE') {
+          setIsGuestTrial(true);
+          setIsTrialMode(true);
         }
+      } catch (e) {
+        localStorage.clear();
       }
-    };
-    initApp();
-  }, []);
-
-  const handleSelectApiKey = async () => {
-    // @ts-ignore
-    if (window.aistudio) {
-      // @ts-ignore
-      await window.aistudio.openSelectKey();
-      setNeedsApiKey(false);
-      setError('');
     }
-  };
+  }, []);
 
   const logout = () => {
     localStorage.clear();
@@ -83,25 +57,18 @@ const App: React.FC = () => {
   const handleCreateCurriculum = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
-    // Verificación proactiva de API KEY para evitar bloqueos en Netlify
-    if (!process.env.API_KEY) {
-      setNeedsApiKey(true);
-      return;
-    }
-
     setIsProcessing(true);
     setStatus(AppStatus.LOADING);
 
     try {
       const syllabus = await generateCurriculum(
-        topic || "Aventura de Aprendizaje",
+        topic || "Misión de Aprendizaje",
         inputValue,
         sourceType === 'search' || sourceType === 'youtube',
         selectedFileData || undefined
       );
       
-      if (!syllabus || !syllabus.chapters) throw new Error("Respuesta inválida");
+      if (!syllabus?.chapters) throw new Error("Datos insuficientes");
 
       syllabus.chapters = syllabus.chapters.map((c, i) => ({
         ...c,
@@ -112,24 +79,16 @@ const App: React.FC = () => {
       setTopic(syllabus.topic);
       setStatus(AppStatus.CURRICULUM_MAP);
     } catch (err: any) {
-      console.error("Error en generación:", err);
-      if (err.message?.includes("Requested entity was not found") || err.message?.includes("API_KEY")) {
-        setNeedsApiKey(true);
-        setStatus(AppStatus.IDLE);
-      } else {
-        setError("El Oráculo no pudo procesar este material. Intenta con un texto más breve o revisa el PDF.");
-        setStatus(AppStatus.IDLE);
-      }
+      console.error("Error generating curriculum:", err);
+      setError("No se pudo procesar el contenido. Intenta con un material más corto.");
+      setStatus(AppStatus.IDLE);
     } finally {
       setIsProcessing(false);
     }
   };
 
   const startChapter = async (chapter: Chapter) => {
-    if (chapter.status === 'locked' || !process.env.API_KEY) {
-      if (!process.env.API_KEY) setNeedsApiKey(true);
-      return;
-    }
+    if (chapter.status === 'locked') return;
     setError('');
     setIsProcessing(true);
     setStatus(AppStatus.LOADING);
@@ -147,14 +106,9 @@ const App: React.FC = () => {
       setLevels(chapterLevels);
       setStatus(AppStatus.PREVIEW);
     } catch (err: any) {
-      console.error("Error en niveles:", err);
-      if (err.message?.includes("Requested entity was not found")) {
-        setNeedsApiKey(true);
-        setStatus(AppStatus.IDLE);
-      } else {
-        setError("Fallo al construir la sala. Prueba reintentando.");
-        setStatus(AppStatus.ERROR);
-      }
+      console.error("Error generating levels:", err);
+      setError("Error al construir la sala de escape.");
+      setStatus(AppStatus.ERROR);
     } finally {
       setIsProcessing(false);
     }
@@ -168,7 +122,7 @@ const App: React.FC = () => {
             <i className="fas fa-magic text-white text-3xl"></i>
           </div>
           <h2 className="text-4xl font-fredoka font-black text-[#FF6B6B] mb-2 uppercase tracking-tighter">EduEscape</h2>
-          <p className="text-[#4ECDC4] font-bold text-sm mb-8 italic">¡Aprender es la mayor aventura!</p>
+          <p className="text-[#4ECDC4] font-bold text-sm mb-8 italic">¡El saber es tu mayor poder!</p>
           
           {!showPasswordPrompt ? (
             <div className="space-y-4">
@@ -185,11 +139,11 @@ const App: React.FC = () => {
                 localStorage.setItem('edu_escape_user', JSON.stringify(userData));
                 setStatus(AppStatus.IDLE);
               }} className="space-y-4 text-left">
-                <input name="fullName" required placeholder="Nombre de Héroe" className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-[#FF6B6B] transition-all" />
-                <input name="medicalId" required placeholder="ID de Jugador" className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-[#FF6B6B] transition-all" />
-                <Button type="submit" className="w-full py-5 text-xl btn-joy bg-[#FF6B6B] text-white uppercase font-black">ENTRAR AL JUEGO</Button>
+                <input name="fullName" required placeholder="Tu Nombre" className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-[#FF6B6B] transition-all" />
+                <input name="medicalId" required placeholder="ID de Usuario" className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-[#FF6B6B] transition-all" />
+                <Button type="submit" className="w-full py-5 text-xl btn-joy bg-[#FF6B6B] text-white uppercase font-black">COMENZAR AVENTURA</Button>
               </form>
-              <button onClick={() => setShowPasswordPrompt(true)} className="w-full text-[#6C5CE7] font-black uppercase text-[11px] tracking-widest mt-4">MODO INVITADO</button>
+              <button onClick={() => setShowPasswordPrompt(true)} className="w-full text-[#6C5CE7] font-black uppercase text-[11px] tracking-widest mt-4">ENTRAR COMO INVITADO</button>
             </div>
           ) : (
             <form onSubmit={(e) => {
@@ -209,7 +163,7 @@ const App: React.FC = () => {
               }
             }} className="space-y-6 text-left">
               <div className="p-6 bg-white rounded-[2rem] border-4 border-[#6C5CE7]">
-                <input type="password" autoFocus required value={trialPassword} onChange={(e) => setTrialPassword(e.target.value)} placeholder="Código secreto..." className="w-full bg-[#F7FFF7] border-none text-center text-xl font-black outline-none" />
+                <input type="password" autoFocus required value={trialPassword} onChange={(e) => setTrialPassword(e.target.value)} placeholder="Código..." className="w-full bg-[#F7FFF7] border-none text-center text-xl font-black outline-none" />
               </div>
               <div className="flex gap-4">
                 <Button type="submit" className="flex-grow py-5 font-black btn-joy bg-[#6C5CE7] text-white uppercase">VALIDAR</Button>
@@ -225,25 +179,18 @@ const App: React.FC = () => {
   if (status === AppStatus.IDLE) {
     return (
       <ScreenWrapper className="items-center justify-center p-6 bg-transparent">
-        {needsApiKey && <ApiKeyOverlay onSelect={handleSelectApiKey} onClose={() => setNeedsApiKey(false)} />}
         <div className="max-w-4xl w-full h-full max-h-[90vh] glass p-8 md:p-12 rounded-[5rem] flex flex-col relative overflow-hidden shadow-2xl border-4 border-white animate-in slide-in-from-bottom-12 duration-500">
-          {isGuestTrial && (
-            <div className="absolute top-0 left-0 w-full py-2 bg-[#FFD93D] text-amber-900 text-[10px] font-black uppercase tracking-[0.4em] text-center z-50">
-              MODO PRUEBA ACTIVO
-            </div>
-          )}
-          
           <div className="flex justify-between items-center mb-8 relative z-50">
              <div className="bg-white px-4 py-2 rounded-full shadow-sm border-2 border-slate-100 flex items-center gap-2">
                <div className="w-4 h-4 rounded-full bg-[#4ECDC4]"></div>
                <span className="text-[11px] text-[#6C5CE7] font-black uppercase tracking-widest">{user?.fullName}</span>
              </div>
-             <button onClick={logout} className="text-slate-300 font-black text-[10px] uppercase hover:text-[#FF6B6B] transition-colors">SALIR</button>
+             <button onClick={logout} className="text-slate-300 font-black text-[10px] uppercase hover:text-red-400 transition-colors">SALIR</button>
           </div>
 
           <div className="text-center mb-8 flex-shrink-0">
             <h1 className="text-6xl md:text-7xl font-cinzel font-black shimmer-text leading-none mb-2">EduEscape</h1>
-            <p className="text-slate-400 text-base font-bold italic">Selecciona tu material de estudio.</p>
+            <p className="text-slate-400 text-base font-bold italic">Transforma cualquier contenido en un juego.</p>
           </div>
 
           <form onSubmit={handleCreateCurriculum} className="flex-grow flex flex-col justify-center space-y-8 max-w-2xl mx-auto w-full relative z-10 overflow-hidden">
@@ -253,7 +200,7 @@ const App: React.FC = () => {
                   key={type} 
                   type="button" 
                   onClick={() => { setSourceType(type); setError(''); setSelectedFileData(null); setTopic(''); }}
-                  className={`px-6 py-2 rounded-xl font-black text-[10px] border-2 transition-all ${sourceType === type ? 'bg-[#FF6B6B] border-white text-white shadow-lg scale-105' : 'bg-white border-slate-50 text-slate-300'}`}
+                  className={`px-6 py-2 rounded-xl font-black text-[10px] border-2 transition-all ${sourceType === type ? 'bg-[#FF6B6B] border-white text-white shadow-lg scale-105' : 'bg-white border-slate-50 text-slate-300 hover:text-slate-500'}`}
                 >
                   {type.toUpperCase()}
                 </button>
@@ -266,11 +213,6 @@ const App: React.FC = () => {
                   <input type="file" ref={fileInputRef} className="hidden" accept=".pdf" onChange={(e) => {
                      const file = e.target.files?.[0];
                      if (!file) return;
-                     // Protección contra archivos gigantes que traban el navegador
-                     if (file.size > 10 * 1024 * 1024) {
-                       setError("El PDF es demasiado grande (máx 10MB)");
-                       return;
-                     }
                      const reader = new FileReader();
                      reader.onload = () => {
                        const base64 = (reader.result as string).split(',')[1];
@@ -283,16 +225,16 @@ const App: React.FC = () => {
                   <div className="w-16 h-16 bg-[#6C5CE7] text-white rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg">
                     <i className="fas fa-file-upload text-2xl"></i>
                   </div>
-                  <p className="text-xl font-black text-slate-800 line-clamp-2 px-4">{topic || "Carga tu PDF aquí"}</p>
+                  <p className="text-xl font-black text-slate-800 line-clamp-2 px-4">{topic || "Arrastra tu PDF aquí"}</p>
                   {error && <p className="text-red-500 text-[10px] font-black mt-2 uppercase">{error}</p>}
                 </div>
               ) : (
-                <textarea required value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="Contenido o enlace..." className="flex-grow bg-[#F7FFF7] border-2 border-white rounded-[2rem] px-6 py-4 text-lg shadow-inner outline-none focus:border-[#4ECDC4] transition-all resize-none" />
+                <textarea required value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="Escribe el contenido o pega el enlace aquí..." className="flex-grow bg-[#F7FFF7] border-2 border-white rounded-[2rem] px-6 py-4 text-lg shadow-inner outline-none focus:border-[#4ECDC4] transition-all resize-none font-medium" />
               )}
             </div>
 
-            <Button type="submit" disabled={sourceType === 'pdf' && !selectedFileData} className="w-full py-6 text-2xl font-black rounded-[2rem] bg-[#FF6B6B] text-white shadow-xl btn-joy flex-shrink-0 uppercase">
-              GENERAR DESAFÍO
+            <Button type="submit" disabled={isProcessing || (sourceType === 'pdf' && !selectedFileData)} className="w-full py-6 text-2xl font-black rounded-[2rem] bg-[#FF6B6B] text-white shadow-xl btn-joy flex-shrink-0 uppercase">
+              GENERAR JUEGO
             </Button>
           </form>
         </div>
@@ -303,14 +245,13 @@ const App: React.FC = () => {
   if (status === AppStatus.CURRICULUM_MAP && curriculum) {
     return (
       <ScreenWrapper className="bg-transparent p-6">
-        {needsApiKey && <ApiKeyOverlay onSelect={handleSelectApiKey} onClose={() => setNeedsApiKey(false)} />}
         <div className="max-w-6xl w-full mx-auto h-full flex flex-col">
           <header className="flex justify-between items-center mb-8 flex-shrink-0 relative z-50">
             <div className="text-left">
               <span className="bg-[#FFD93D] px-4 py-1 rounded-full font-black text-[10px] uppercase shadow-sm">MAPA DE LA AVENTURA</span>
               <h1 className="text-4xl md:text-5xl font-cinzel font-black text-slate-800 mt-2 truncate max-w-md">{topic}</h1>
             </div>
-            <Button onClick={() => setStatus(AppStatus.IDLE)} variant="secondary" className="rounded-xl px-4 py-3 font-black text-[10px] uppercase border-2 shadow-sm">CAMBIAR TEMA</Button>
+            <Button onClick={() => setStatus(AppStatus.IDLE)} variant="secondary" className="rounded-xl px-4 py-3 font-black text-[10px] uppercase border-2 shadow-sm">NUEVO TEMA</Button>
           </header>
 
           <div className="flex-grow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scroll pb-6">
@@ -327,7 +268,7 @@ const App: React.FC = () => {
                 </div>
                 <h3 className="text-xl font-black text-slate-800 mb-2 leading-tight">{chapter.title}</h3>
                 <p className="text-slate-400 font-bold italic text-sm line-clamp-3 flex-grow">{chapter.description}</p>
-                {chapter.status === 'available' && <span className="text-[10px] font-black text-[#FF6B6B] text-right uppercase mt-4">ENTRAR <i className="fas fa-play ml-1"></i></span>}
+                {chapter.status === 'available' && <span className="text-[10px] font-black text-[#FF6B6B] text-right uppercase mt-4">INGRESAR <i className="fas fa-play ml-1"></i></span>}
               </div>
             ))}
           </div>
@@ -343,7 +284,7 @@ const App: React.FC = () => {
            <div className="w-24 h-24 bg-[#FF6B6B] text-white rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3">
               <i className="fas fa-scroll text-4xl"></i>
            </div>
-           <span className="bg-[#4ECDC4]/20 text-[#4ECDC4] px-6 py-2 rounded-full font-black text-xs uppercase tracking-widest mb-4 inline-block tracking-widest">OBJETIVO DE MISIÓN</span>
+           <span className="bg-[#4ECDC4]/20 text-[#4ECDC4] px-6 py-2 rounded-full font-black text-xs uppercase tracking-widest mb-4 inline-block">Misión Preparada</span>
            <h2 className="text-4xl md:text-5xl font-cinzel font-black text-slate-800 mb-6 leading-tight uppercase">{activeChapter.title}</h2>
            <div className="bg-[#F7FFF7] p-8 rounded-[3rem] border-2 border-dashed border-[#4ECDC4]/30 mb-10">
               <p className="text-slate-500 text-lg font-bold italic leading-relaxed">
@@ -352,7 +293,7 @@ const App: React.FC = () => {
            </div>
            <div className="flex flex-col gap-4">
               <Button onClick={() => setStatus(AppStatus.PLAYING)} className="w-full py-6 text-2xl bg-[#FF6B6B] text-white rounded-[2rem] shadow-xl btn-joy uppercase font-black">
-                ¡INICIAR MISIÓN!
+                ¡INICIAR DESAFÍO!
               </Button>
               <button onClick={() => setStatus(AppStatus.CURRICULUM_MAP)} className="text-slate-400 font-black text-[11px] uppercase tracking-widest hover:text-[#6C5CE7] transition-colors">
                 VOLVER AL MAPA
@@ -397,15 +338,7 @@ const App: React.FC = () => {
     <ScreenWrapper className="items-center justify-center text-center p-12 bg-[#F7FFF7]">
       <div className="w-20 h-20 border-8 border-[#FFE66D] border-t-[#FF6B6B] rounded-full animate-spin shadow-xl mb-8"></div>
       <h2 className="text-4xl font-cinzel font-black text-[#FF6B6B] mb-2 uppercase">CREANDO MUNDO</h2>
-      <p className="text-[#4ECDC4] text-xs font-black uppercase tracking-[0.4em] animate-pulse mb-12">Analizando el saber...</p>
-      
-      {/* Botón de escape por si la red falla */}
-      <button 
-        onClick={() => setStatus(AppStatus.IDLE)} 
-        className="mt-8 px-6 py-2 bg-white rounded-full text-[10px] font-black uppercase text-slate-400 border-2 border-slate-100 hover:text-red-400 transition-colors"
-      >
-        CANCELAR CARGA
-      </button>
+      <p className="text-[#4ECDC4] text-xs font-black uppercase tracking-[0.4em] animate-pulse">Analizando el conocimiento...</p>
     </ScreenWrapper>
   );
 
@@ -415,7 +348,7 @@ const App: React.FC = () => {
         <i className="fas fa-ghost text-5xl text-red-400"></i>
       </div>
       <h2 className="text-4xl font-cinzel font-black text-slate-800 mb-4 uppercase leading-none">HA OCURRIDO UN ERROR</h2>
-      <p className="text-slate-400 mb-8 text-xl font-bold italic">{error || "Lo sentimos, el Oráculo está descansando."}</p>
+      <p className="text-slate-400 mb-8 text-xl font-bold italic">{error || "Algo salió mal al cargar los desafíos."}</p>
       <Button onClick={() => setStatus(AppStatus.IDLE)} className="px-8 py-4 bg-[#4ECDC4] text-white rounded-xl uppercase font-black shadow-lg">VOLVER AL INICIO</Button>
     </ScreenWrapper>
   );
