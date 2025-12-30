@@ -58,27 +58,21 @@ const App: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Límite razonable para la API
-    if (file.size > 15 * 1024 * 1024) {
-      setError("El archivo es demasiado grande (Máximo 15MB recomendado).");
+    // Reducimos el límite para asegurar que la API no falle por tamaño
+    if (file.size > 10 * 1024 * 1024) {
+      setError("El archivo es muy pesado. Intenta con uno de menos de 10MB.");
       return;
     }
 
     const reader = new FileReader();
     reader.onload = () => {
-      try {
-        const result = reader.result as string;
-        const base64 = result.split(',')[1];
-        if (!base64) throw new Error("Fallo al codificar archivo.");
-        
-        setSelectedFileData({ data: base64, mimeType: file.type });
-        setTopic(file.name.replace(/\.[^/.]+$/, ""));
-        setError('');
-      } catch (e) {
-        setError("Error procesando el archivo localmente.");
-      }
+      const result = reader.result as string;
+      const base64 = result.split(',')[1];
+      setSelectedFileData({ data: base64, mimeType: file.type });
+      setTopic(file.name.replace(/\.[^/.]+$/, ""));
+      setError('');
     };
-    reader.onerror = () => setError("Error al leer el archivo.");
+    reader.onerror = () => setError("Error leyendo el archivo.");
     reader.readAsDataURL(file);
   };
 
@@ -96,7 +90,7 @@ const App: React.FC = () => {
       );
       
       if (!syllabus?.chapters || syllabus.chapters.length === 0) {
-        throw new Error("La IA no devolvió un formato válido.");
+        throw new Error("No hay capítulos");
       }
 
       syllabus.chapters = syllabus.chapters.map((c, i) => ({
@@ -108,16 +102,8 @@ const App: React.FC = () => {
       setTopic(syllabus.topic);
       setStatus(AppStatus.CURRICULUM_MAP);
     } catch (err: any) {
-      console.error("Detailed Curriculum Error:", err);
-      // Mensaje más específico basado en el error si es posible
-      const errorMsg = err.message?.toLowerCase();
-      if (errorMsg?.includes("json") || errorMsg?.includes("parsing")) {
-        setError("La IA no pudo estructurar los datos correctamente. Intenta con otro archivo.");
-      } else if (errorMsg?.includes("api key")) {
-        setError("Error de autenticación. Revisa la API Key.");
-      } else {
-        setError("No se pudo procesar el material. Asegúrate de que no sea muy extenso y sea legible.");
-      }
+      console.error("Curriculum Error:", err);
+      setError("La IA está tardando en responder o el archivo es ilegible. ¡Inténtalo de nuevo!");
       setStatus(AppStatus.IDLE);
     } finally {
       setIsProcessing(false);
@@ -140,13 +126,13 @@ const App: React.FC = () => {
         isTrialMode
       );
       
-      if (!chapterLevels || chapterLevels.length === 0) throw new Error("No se generaron niveles.");
+      if (!chapterLevels || chapterLevels.length === 0) throw new Error("Vacio");
       
       setLevels(chapterLevels);
       setStatus(AppStatus.PREVIEW);
     } catch (err: any) {
-      console.error("Detailed Levels Error:", err);
-      setError("Error al generar desafíos para esta sala.");
+      console.error("Levels Error:", err);
+      setError("No se pudieron generar los desafíos. Prueba reintentando.");
       setStatus(AppStatus.ERROR);
     } finally {
       setIsProcessing(false);
