@@ -8,9 +8,10 @@ export async function generateCurriculum(
   useSearch: boolean = false,
   mediaFile?: FileData
 ): Promise<Curriculum> {
-  // Create a new instance right before the call to ensure up-to-date API key usage.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  // Usamos flash por defecto para evitar bloqueos de facturación y ganar velocidad
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+
+  const ai = new GoogleGenAI({ apiKey });
   const modelName = 'gemini-3-flash-preview';
 
   const systemInstruction = `Eres un Experto en Gamificación Educativa. 
@@ -23,38 +24,44 @@ export async function generateCurriculum(
   - topic: nombre del tema.
   - chapters: array de 6 objetos con (id, title, description, topics: string[]).
   
-  Responde solo JSON en español.`;
+  Responde solo JSON en español. NO incluyas markdown o bloques de código.`;
 
-  const response = await ai.models.generateContent({
-    model: modelName,
-    contents: [{ 
-      parts: [
-        { text: userPrompt },
-        ...(mediaFile ? [{ inlineData: { data: mediaFile.data, mimeType: mediaFile.mimeType } }] : [])
-      ] 
-    }],
-    config: {
-      systemInstruction,
-      responseMimeType: "application/json",
-      tools: useSearch ? [{ googleSearch: {} }] : undefined,
+  try {
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: [{ 
+        parts: [
+          { text: userPrompt },
+          ...(mediaFile ? [{ inlineData: { data: mediaFile.data, mimeType: mediaFile.mimeType } }] : [])
+        ] 
+      }],
+      config: {
+        systemInstruction,
+        responseMimeType: "application/json",
+        tools: useSearch ? [{ googleSearch: {} }] : undefined,
+      }
+    });
+
+    const cleanText = response.text?.trim().replace(/^```json/, '').replace(/```$/, '') || "{}";
+    const syllabus: Curriculum = JSON.parse(cleanText);
+
+    // Extract grounding URLs
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (groundingChunks && useSearch) {
+      const sources = groundingChunks
+        .filter((chunk: any) => chunk.web)
+        .map((chunk: any) => ({
+          title: chunk.web.title,
+          uri: chunk.web.uri
+        }));
+      syllabus.sources = sources;
     }
-  });
 
-  const syllabus: Curriculum = JSON.parse(response.text || "{}");
-
-  // Extract grounding URLs as required for search grounding
-  const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-  if (groundingChunks && useSearch) {
-    const sources = groundingChunks
-      .filter((chunk: any) => chunk.web)
-      .map((chunk: any) => ({
-        title: chunk.web.title,
-        uri: chunk.web.uri
-      }));
-    syllabus.sources = sources;
+    return syllabus;
+  } catch (error) {
+    console.error("Gemini Service Error:", error);
+    throw error;
   }
-
-  return syllabus;
 }
 
 export async function generateChapterLevels(
@@ -65,8 +72,10 @@ export async function generateChapterLevels(
   mediaFile?: FileData,
   isTrialMode: boolean = false
 ): Promise<GameLevel[]> {
-  // Create a new instance right before the call to ensure up-to-date API key usage.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY_MISSING");
+
+  const ai = new GoogleGenAI({ apiKey });
   const modelName = 'gemini-3-flash-preview';
   const numLevels = isTrialMode ? 5 : 8;
 
@@ -74,44 +83,48 @@ export async function generateChapterLevels(
   Genera EXACTAMENTE ${numLevels} niveles para el capítulo: "${chapter.title}".
   
   REGLAS DE SEGURIDAD PARA EL ACCESO AL APRENDIZAJE:
-  1. NIVEL 1 (GEOGRAFÍA O LITERATURA): Haz una pregunta de cultura general sobre geografía mundial o literatura universal clásica. NO debe tener relación con el PDF.
-  2. NIVEL 2 (MÚSICA O ARTE): Haz una pregunta sobre compositores famosos, instrumentos o pintores históricos. NO debe tener relación con el PDF.
-  3. NIVELES 3 en adelante: Preguntas técnicas basadas en "${chapter.title}" del tema "${topic}" usando el contenido proporcionado.
+  1. NIVEL 1 (GEOGRAFÍA O LITERATURA): Pregunta cultura general mundial. NO PDF.
+  2. NIVEL 2 (MÚSICA O ARTE): Pregunta historia del arte o música clásica. NO PDF.
+  3. NIVELES 3 en adelante: Preguntas técnicas sobre "${chapter.title}" usando el PDF.
   
-  El tono debe ser épico y divertido. Idioma: Español.`;
+  Idioma: Español. Responde SOLO JSON puro.`;
 
-  const userPrompt = `Genera un Array JSON de ${numLevels} niveles siguiendo las reglas de cultura general para los niveles 1 y 2. 
+  const userPrompt = `Genera un Array JSON de ${numLevels} niveles. 
   Campos: id, category, scenicDescription, riddle, options(4), correctAnswer, hints(3), explanation, knowledgeSnippet, congratulationMessage.`;
 
-  const response = await ai.models.generateContent({
-    model: modelName,
-    contents: [{ 
-      parts: [
-        { text: userPrompt },
-        ...(mediaFile ? [{ inlineData: { data: mediaFile.data, mimeType: mediaFile.mimeType } }] : [])
-      ] 
-    }],
-    config: {
-      systemInstruction,
-      responseMimeType: "application/json",
-      tools: useSearch ? [{ googleSearch: {} }] : undefined,
-      thinkingConfig: { thinkingBudget: 0 } // Gemini 3 models support thinkingBudget; 0 for lower latency
+  try {
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: [{ 
+        parts: [
+          { text: userPrompt },
+          ...(mediaFile ? [{ inlineData: { data: mediaFile.data, mimeType: mediaFile.mimeType } }] : [])
+        ] 
+      }],
+      config: {
+        systemInstruction,
+        responseMimeType: "application/json",
+        tools: useSearch ? [{ googleSearch: {} }] : undefined,
+      }
+    });
+
+    const cleanText = response.text?.trim().replace(/^```json/, '').replace(/```$/, '') || "[]";
+    const levels: GameLevel[] = JSON.parse(cleanText);
+
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (groundingChunks && useSearch) {
+      const sources = groundingChunks
+        .filter((chunk: any) => chunk.web)
+        .map((chunk: any) => ({
+          title: chunk.web.title,
+          uri: chunk.web.uri
+        }));
+      levels.forEach(lvl => lvl.sources = sources);
     }
-  });
 
-  const levels: GameLevel[] = JSON.parse(response.text || "[]");
-
-  // Extract grounding URLs as required for search grounding
-  const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-  if (groundingChunks && useSearch) {
-    const sources = groundingChunks
-      .filter((chunk: any) => chunk.web)
-      .map((chunk: any) => ({
-        title: chunk.web.title,
-        uri: chunk.web.uri
-      }));
-    levels.forEach(lvl => lvl.sources = sources);
+    return levels;
+  } catch (error) {
+    console.error("Gemini Levels Error:", error);
+    throw error;
   }
-
-  return levels;
 }
