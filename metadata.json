@@ -1,0 +1,8 @@
+{
+  "name": "EduEscape Pro: Infinite Learning",
+  "description": "Escape room educativo que consume PDF, YouTube y Web Search para crear desafíos de cultura general.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
