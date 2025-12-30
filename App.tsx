@@ -54,6 +54,29 @@ const App: React.FC = () => {
     setStatus(AppStatus.AUTH);
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validar tamaño aproximado (evitar bloqueos por archivos gigantes)
+    if (file.size > 20 * 1024 * 1024) {
+      setError("El archivo es demasiado grande (Máx 20MB).");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      setSelectedFileData({ data: base64, mimeType: file.type });
+      setTopic(file.name.replace(/\.[^/.]+$/, ""));
+      setError('');
+    };
+    reader.onerror = () => {
+      setError("Error al leer el archivo.");
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleCreateCurriculum = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -62,13 +85,13 @@ const App: React.FC = () => {
 
     try {
       const syllabus = await generateCurriculum(
-        topic || "Misión de Aprendizaje",
+        topic || "Nueva Misión",
         inputValue,
         selectedFileData || undefined
       );
       
       if (!syllabus?.chapters || syllabus.chapters.length === 0) {
-        throw new Error("No se pudo procesar el contenido.");
+        throw new Error("Formato inválido");
       }
 
       syllabus.chapters = syllabus.chapters.map((c, i) => ({
@@ -80,8 +103,8 @@ const App: React.FC = () => {
       setTopic(syllabus.topic);
       setStatus(AppStatus.CURRICULUM_MAP);
     } catch (err: any) {
-      console.error("Error:", err);
-      setError("Error de conexión o formato de PDF. Asegúrate de que el archivo sea legible.");
+      console.error("General Process Error:", err);
+      setError("No se pudo procesar el material. Asegúrate de que no tenga contraseña y sea legible.");
       setStatus(AppStatus.IDLE);
     } finally {
       setIsProcessing(false);
@@ -109,8 +132,8 @@ const App: React.FC = () => {
       setLevels(chapterLevels);
       setStatus(AppStatus.PREVIEW);
     } catch (err: any) {
-      console.error("Levels Error:", err);
-      setError("No se pudieron generar los niveles. Intenta nuevamente.");
+      console.error("Levels Generation Error:", err);
+      setError("Hubo un error construyendo la sala. Prueba con otro capítulo.");
       setStatus(AppStatus.ERROR);
     } finally {
       setIsProcessing(false);
@@ -193,50 +216,45 @@ const App: React.FC = () => {
 
           <div className="text-center mb-8 flex-shrink-0">
             <h1 className="text-6xl md:text-7xl font-cinzel font-black shimmer-text leading-none mb-2">EduEscape</h1>
-            <p className="text-slate-400 text-base font-bold italic">Sube un PDF para jugar.</p>
+            <p className="text-slate-400 text-base font-bold italic">Sube tu material para jugar.</p>
           </div>
 
           <form onSubmit={handleCreateCurriculum} className="flex-grow flex flex-col justify-center space-y-8 max-w-2xl mx-auto w-full relative z-10 overflow-hidden">
             <div className="flex justify-center gap-3 flex-shrink-0">
-              {(['pdf', 'text'] as SourceType[]).map((type) => (
+              {(['pdf', 'video', 'text'] as SourceType[]).map((type) => (
                 <button 
                   key={type} 
                   type="button" 
                   onClick={() => { setSourceType(type); setError(''); setSelectedFileData(null); setTopic(''); }}
-                  className={`px-8 py-3 rounded-2xl font-black text-xs border-4 transition-all ${sourceType === type ? 'bg-[#FF6B6B] border-white text-white shadow-lg scale-105' : 'bg-white border-slate-100 text-slate-300'}`}
+                  className={`px-6 py-2 rounded-2xl font-black text-[10px] border-4 transition-all ${sourceType === type ? 'bg-[#FF6B6B] border-white text-white shadow-lg scale-105' : 'bg-white border-slate-100 text-slate-300'}`}
                 >
-                  {type === 'pdf' ? 'ARCHIVO PDF' : 'TEXTO LIBRE'}
+                  {type.toUpperCase()}
                 </button>
               ))}
             </div>
 
             <div className="flex-grow overflow-hidden flex flex-col">
-              {sourceType === 'pdf' ? (
+              {sourceType !== 'text' ? (
                 <div onClick={() => fileInputRef.current?.click()} className="group flex-grow border-4 border-dashed border-[#F7FFF7] rounded-[3rem] p-8 text-center cursor-pointer hover:border-[#4ECDC4] bg-white shadow-inner flex flex-col items-center justify-center transition-all">
-                  <input type="file" ref={fileInputRef} className="hidden" accept=".pdf" onChange={(e) => {
-                     const file = e.target.files?.[0];
-                     if (!file) return;
-                     const reader = new FileReader();
-                     reader.onload = () => {
-                       const base64 = (reader.result as string).split(',')[1];
-                       setSelectedFileData({ data: base64, mimeType: file.type });
-                       setTopic(file.name.replace(/\.[^/.]+$/, ""));
-                       setError('');
-                     };
-                     reader.readAsDataURL(file);
-                  }} />
-                  <div className="w-16 h-16 bg-[#6C5CE7] text-white rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg">
-                    <i className="fas fa-file-upload text-2xl"></i>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    accept={sourceType === 'pdf' ? ".pdf" : "video/*"} 
+                    onChange={handleFileChange} 
+                  />
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg ${sourceType === 'pdf' ? 'bg-[#6C5CE7]' : 'bg-[#4ECDC4]'} text-white`}>
+                    <i className={`fas ${sourceType === 'pdf' ? 'fa-file-pdf' : 'fa-video'} text-2xl`}></i>
                   </div>
-                  <p className="text-xl font-black text-slate-800 line-clamp-2 px-4">{topic || "Selecciona tu PDF"}</p>
+                  <p className="text-xl font-black text-slate-800 line-clamp-2 px-4">{topic || `Selecciona tu ${sourceType.toUpperCase()}`}</p>
                 </div>
               ) : (
                 <textarea required value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="Pega aquí el contenido que quieres estudiar..." className="flex-grow bg-[#F7FFF7] border-2 border-white rounded-[2rem] px-6 py-4 text-lg shadow-inner outline-none focus:border-[#4ECDC4] transition-all resize-none font-medium" />
               )}
             </div>
 
-            <Button type="submit" disabled={isProcessing || (sourceType === 'pdf' && !selectedFileData)} className="w-full py-6 text-2xl font-black rounded-[2rem] bg-[#FF6B6B] text-white shadow-xl btn-joy flex-shrink-0 uppercase">
-              {isProcessing ? "CONSTRUYENDO..." : "CREAR JUEGO"}
+            <Button type="submit" disabled={isProcessing || (sourceType !== 'text' && !selectedFileData)} className="w-full py-6 text-2xl font-black rounded-[2rem] bg-[#FF6B6B] text-white shadow-xl btn-joy flex-shrink-0 uppercase">
+              {isProcessing ? "ANALIZANDO..." : "¡GENERAR AVENTURA!"}
             </Button>
             {error && <p className="text-red-500 text-center text-[10px] font-black uppercase mt-2">{error}</p>}
           </form>
@@ -254,7 +272,7 @@ const App: React.FC = () => {
               <span className="bg-[#FFD93D] px-4 py-1 rounded-full font-black text-[10px] uppercase shadow-sm">MAPA DE MISIONES</span>
               <h1 className="text-4xl md:text-5xl font-cinzel font-black text-slate-800 mt-2 truncate max-w-md">{topic}</h1>
             </div>
-            <Button onClick={() => setStatus(AppStatus.IDLE)} variant="secondary" className="rounded-xl px-4 py-3 font-black text-[10px] uppercase border-2 shadow-sm">NUEVO PDF</Button>
+            <Button onClick={() => setStatus(AppStatus.IDLE)} variant="secondary" className="rounded-xl px-4 py-3 font-black text-[10px] uppercase border-2 shadow-sm">CAMBIAR TEMA</Button>
           </header>
 
           <div className="flex-grow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scroll pb-6">

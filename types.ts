@@ -45,7 +45,7 @@ export enum AppStatus {
   ERROR = 'ERROR'
 }
 
-export type SourceType = 'text' | 'pdf'; // Solo PDF y Texto para máxima fluidez
+export type SourceType = 'text' | 'pdf' | 'video';
 
 export interface FileData {
   data: string;

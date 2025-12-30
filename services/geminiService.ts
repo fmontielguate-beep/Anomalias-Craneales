@@ -31,20 +31,22 @@ export async function generateCurriculum(
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = 'gemini-3-flash-preview';
 
-  const systemInstruction = `Eres un Experto en Gamificación Educativa. 
-  Tu misión es convertir el material proporcionado en un currículo de 6 capítulos para un escape room.
-  Usa ÚNICAMENTE la información del contexto o el archivo proporcionado.
-  Idioma: Español. Responde solo con JSON puro.`;
+  const systemInstruction = `Eres un experto en educación y gamificación.
+  Tu misión es analizar el contenido proporcionado (que puede ser un PDF, un VIDEO o un TEXTO) y estructurar un plan de estudio de 6 capítulos para un juego.
+  Extrae los puntos clave más importantes.
+  Responde ÚNICAMENTE en formato JSON en español.`;
 
-  const userPrompt = `Analiza este material sobre "${topic}": "${sourceContent.substring(0, 15000)}".
-  Genera un objeto JSON:
+  const userPrompt = `Analiza el material sobre "${topic}". 
+  ${sourceContent ? `Texto proporcionado: "${sourceContent.substring(0, 10000)}"` : 'Por favor, analiza el archivo adjunto (PDF o Video).'}
+  
+  Genera un objeto JSON con esta estructura exacta:
   {
     "topic": "${topic}",
     "chapters": [
-      { "id": 1, "title": "Título del Capítulo", "description": "Breve descripción", "topics": ["punto1", "punto2"] }
+      { "id": 1, "title": "Nombre del capítulo", "description": "Breve resumen", "topics": ["punto clave 1", "punto clave 2"] }
     ]
   }
-  Crea exactamente 6 capítulos basados en el contenido.`;
+  Deben ser exactamente 6 capítulos.`;
 
   try {
     const parts: any[] = [{ text: userPrompt }];
@@ -70,7 +72,7 @@ export async function generateCurriculum(
     const cleanJSON = extractJSON(text);
     return JSON.parse(cleanJSON);
   } catch (error: any) {
-    console.error("Curriculum generation failed:", error);
+    console.error("Critical error in curriculum generation:", error);
     throw error;
   }
 }
@@ -86,25 +88,13 @@ export async function generateChapterLevels(
   const modelName = 'gemini-3-flash-preview';
   const numLevels = isTrialMode ? 4 : 6;
 
-  const systemInstruction = `Eres un Maestro de Acertijos. Genera un juego de escape room de ${numLevels} niveles.
-  IMPORTANTE: Todos los desafíos deben basarse estrictamente en la información sobre "${chapter.title}" del material proporcionado.
+  const systemInstruction = `Eres un Maestro de Escape Rooms. Tu tarea es generar ${numLevels} niveles de juego basados en el tema "${chapter.title}".
+  Debes basar las preguntas en la información del PDF, VIDEO o TEXTO proporcionado.
   Idioma: Español. Responde solo con un ARRAY JSON.`;
 
-  const userPrompt = `Genera un array de ${numLevels} objetos JSON para el capítulo "${chapter.title}".
-  Material de referencia: ${sourceContent.substring(0, 5000)}.
-  Estructura de cada objeto:
-  {
-    "id": número,
-    "category": "Tipo de desafío",
-    "scenicDescription": "Ambientación corta",
-    "riddle": "El acertijo o pregunta técnica",
-    "options": ["opción 1", "opción 2", "opción 3", "opción 4"],
-    "correctAnswer": "la opción correcta exacta",
-    "hints": ["pista 1", "pista 2", "pista 3"],
-    "explanation": "Por qué es correcta",
-    "knowledgeSnippet": "Dato curioso o clave",
-    "congratulationMessage": "¡Genial!"
-  }`;
+  const userPrompt = `Genera un array de ${numLevels} niveles JSON para el capítulo "${chapter.title}".
+  Cada objeto debe contener: id, category, scenicDescription, riddle, options(4), correctAnswer, hints(3), explanation, knowledgeSnippet, congratulationMessage.
+  Asegúrate de que las preguntas sean desafiantes y educativas.`;
 
   try {
     const parts: any[] = [{ text: userPrompt }];
@@ -131,7 +121,7 @@ export async function generateChapterLevels(
     const levels = JSON.parse(cleanJSON);
     return Array.isArray(levels) ? levels : [];
   } catch (error: any) {
-    console.error("Levels generation failed:", error);
+    console.error("Critical error in levels generation:", error);
     throw error;
   }
 }
