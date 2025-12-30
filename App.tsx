@@ -24,35 +24,41 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedFileData, setSelectedFileData] = useState<FileData | null>(null);
   const [isKeyReady, setIsKeyReady] = useState(false);
-  const [showKeyGuide, setShowKeyGuide] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    checkApiKey();
+    const checkKey = async () => {
+      if (window.aistudio) {
+        const hasKey = await window.aistudio.hasSelectedApiKey();
+        setIsKeyReady(hasKey);
+      } else {
+        // En Netlify, dependemos de la variable de entorno
+        setIsKeyReady(!!process.env.API_KEY);
+      }
+    };
+    checkKey();
   }, []);
-
-  const checkApiKey = async () => {
-    if (window.aistudio) {
-      const hasKey = await window.aistudio.hasSelectedApiKey();
-      setIsKeyReady(hasKey);
-    } else {
-      setIsKeyReady(!!process.env.API_KEY);
-    }
-  };
 
   const handleOpenKeyDialog = async () => {
     if (window.aistudio) {
-      await window.aistudio.openSelectKey();
-      setIsKeyReady(true);
-      setError('');
+      try {
+        await window.aistudio.openSelectKey();
+        // Según las reglas, asumimos éxito y procedemos
+        setIsKeyReady(true);
+        setError('');
+      } catch (e) {
+        console.error("Error al abrir selector de llave", e);
+      }
+    } else {
+      setError("Este botón solo funciona dentro de Google AI Studio. En Netlify, configura la variable API_KEY en tu panel de control.");
     }
   };
 
   const handleStartMission = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isKeyReady) {
-      setError("Debes conectar el Motor Gratuito para usar tus PDF.");
+      setError("El motor de IA no está conectado.");
       return;
     }
     
@@ -60,12 +66,18 @@ const App: React.FC = () => {
     setIsProcessing(true);
     setStatus(AppStatus.LOADING);
     try {
-      const syllabus = await generateCurriculum(topic || "Lección", inputValue, selectedFileData || undefined);
+      const syllabus = await generateCurriculum(topic || "Nueva Lección", inputValue, selectedFileData || undefined);
       syllabus.chapters = syllabus.chapters.map((c, i) => ({ ...c, status: i === 0 ? 'available' : 'locked' }));
       setCurriculum(syllabus);
       setStatus(AppStatus.CURRICULUM_MAP);
     } catch (err: any) {
-      setError("Error: Revisa tu conexión a internet o la llave API.");
+      console.error(err);
+      if (err.message?.includes("Requested entity was not found")) {
+        setIsKeyReady(false);
+        setError("La llave API ha expirado o no es válida. Por favor, conéctala de nuevo.");
+      } else {
+        setError("Error al procesar el material. Revisa tu conexión.");
+      }
       setStatus(AppStatus.IDLE);
     } finally {
       setIsProcessing(false);
@@ -92,61 +104,54 @@ const App: React.FC = () => {
 
   if (status === AppStatus.AUTH) {
     return (
-      <ScreenWrapper className="items-center justify-center bg-slate-100 p-4">
-        <div className="max-w-md w-full glass p-8 rounded-[2rem] text-center border-2 border-slate-200">
-          <div className="w-16 h-16 bg-[#FF6B6B] rounded-2xl flex items-center justify-center mx-auto mb-4 text-white text-2xl shadow-md">
-            <i className="fas fa-school"></i>
+      <ScreenWrapper className="items-center justify-center bg-slate-900 p-6">
+        <div className="max-w-md w-full glass p-10 rounded-[3rem] text-center border-none shadow-2xl relative overflow-hidden bg-white">
+          <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[#FF6B6B] to-indigo-600"></div>
+          
+          <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-6 text-white text-3xl shadow-xl shadow-indigo-100 rotate-3">
+            <i className="fas fa-bolt"></i>
           </div>
-          <h2 className="text-3xl font-black text-slate-800 mb-1">EduEscape Pro</h2>
-          <p className="text-slate-500 text-sm mb-8">IA Educativa: De PDF a Aventura</p>
+          
+          <h2 className="text-4xl font-black text-slate-800 mb-2 tracking-tight">EduEscape Pro</h2>
+          <p className="text-slate-400 text-sm mb-10 font-medium">El motor de IA más avanzado para tus clases.</p>
           
           <div className="space-y-4">
-            <div className="py-2 flex items-center gap-2">
-                <div className="flex-grow border-t border-slate-200"></div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Configuración del Motor</span>
-                <div className="flex-grow border-t border-slate-200"></div>
-            </div>
-
-            {!isKeyReady && window.aistudio && (
-               <div className="space-y-2">
-                 <Button onClick={handleOpenKeyDialog} className="w-full py-4 bg-[#4ECDC4] text-white border-none shadow-lg">
-                    <i className="fas fa-key mr-2"></i> ACTIVAR MOTOR GRATUITO
-                 </Button>
-                 <button onClick={() => setShowKeyGuide(!showKeyGuide)} className="text-[10px] text-slate-400 underline font-bold uppercase">
-                    ¿Cómo obtener una llave gratis?
-                 </button>
-                 {showKeyGuide && (
-                   <div className="text-left bg-slate-50 p-4 rounded-xl text-[11px] text-slate-600 border border-slate-200 animate-fade">
-                     <p className="font-bold mb-1">1. Ve a Google AI Studio (es gratis).</p>
-                     <p className="font-bold mb-1">2. Pulsa "Get API Key".</p>
-                     <p className="font-bold mb-1">3. Pégala aquí. ¡Listo!</p>
-                     <p className="mt-2 italic opacity-70">*No requiere tarjeta de crédito y permite miles de peticiones al mes.</p>
-                   </div>
-                 )}
-               </div>
+            {!isKeyReady ? (
+              <div className="space-y-4 animate-slide-up">
+                <Button onClick={handleOpenKeyDialog} className="w-full py-5 bg-indigo-600 text-white border-none shadow-xl shadow-indigo-200 hover:scale-[1.02] transition-transform">
+                   <i className="fas fa-plug mr-2"></i> CONECTAR MOTOR IA
+                </Button>
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-[11px] text-slate-500 text-left leading-relaxed">
+                   <p className="mb-2 font-bold text-slate-700"><i className="fas fa-info-circle mr-1"></i> Información importante:</p>
+                   Para usar Gemini 3 Pro, debes seleccionar una API Key de un proyecto con facturación (Google ofrece un generoso nivel gratuito). 
+                   <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-indigo-600 font-bold underline ml-1">Más info aquí.</a>
+                </div>
+                {error && <p className="text-[10px] text-rose-500 font-bold uppercase">{error}</p>}
+              </div>
+            ) : (
+              <div className="animate-fade">
+                <div className="mb-6 flex items-center justify-center gap-2 text-green-500 font-black text-xs uppercase tracking-widest bg-green-50 py-2 rounded-full">
+                  <i className="fas fa-check-circle"></i> Motor Listo para la Aventura
+                </div>
+                <Button onClick={() => setStatus(AppStatus.IDLE)} className="w-full py-5 bg-[#FF6B6B] text-white shadow-xl shadow-rose-100">
+                  ENTRAR AL PANEL <i className="fas fa-arrow-right ml-2"></i>
+                </Button>
+              </div>
             )}
-
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              setUser({ fullName: "Profesor", medicalId: 'S', specialtyPreference: 'G' });
-              setStatus(AppStatus.IDLE);
-            }} className="pt-2">
-              <Button type="submit" disabled={!isKeyReady && window.aistudio !== undefined} className={`w-full py-4 font-bold rounded-xl transition-all ${isKeyReady ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white text-slate-300 border-2 border-slate-100 cursor-not-allowed'}`}>
-                COMENZAR AVENTURA <i className="fas fa-arrow-right ml-2"></i>
-              </Button>
-            </form>
           </div>
         </div>
       </ScreenWrapper>
     );
   }
 
+  // ... (el resto del componente IDLE, CURRICULUM_MAP, PLAYING y LOADING se mantienen igual que en la versión anterior)
+  
   if (status === AppStatus.IDLE) {
     return (
       <ScreenWrapper className="items-center justify-center p-4 bg-white">
         <div className="max-w-xl w-full glass p-8 rounded-[2rem] text-center border-2 border-slate-200 relative">
           <button onClick={() => setStatus(AppStatus.AUTH)} className="absolute top-4 left-6 text-slate-400 hover:text-slate-600 font-bold text-[10px] uppercase">
-             <i className="fas fa-arrow-left mr-1"></i> Volver
+             <i className="fas fa-arrow-left mr-1"></i> Cambiar Motor
           </button>
           <header className="mb-8 mt-4">
             <h1 className="text-3xl font-black text-slate-800 mb-2">Prepara tu Clase</h1>
@@ -179,7 +184,7 @@ const App: React.FC = () => {
              )}
 
              <Button type="submit" disabled={isProcessing || (!selectedFileData && !inputValue)} className="w-full py-4 bg-[#FF6B6B] text-white font-bold rounded-xl shadow-lg border-none">
-               {isProcessing ? "TRANSFORMANDO CONTENIDO..." : "¡GENERAR ESCAPE ROOM!"}
+               {isProcessing ? "TRANSFORMANDO CON GEMINI PRO..." : "¡GENERAR ESCAPE ROOM!"}
              </Button>
              
              {error && <p className="text-xs font-bold text-red-500 mt-2">{error}</p>}
@@ -195,7 +200,7 @@ const App: React.FC = () => {
         <div className="max-w-4xl w-full mx-auto h-full flex flex-col">
           <header className="mb-8 flex justify-between items-center">
             <div className="overflow-hidden">
-                <p className="text-[10px] font-black text-[#FF6B6B] uppercase tracking-[0.2em] mb-1">Proyecto Educativo</p>
+                <p className="text-[10px] font-black text-[#FF6B6B] uppercase tracking-[0.2em] mb-1">Proyecto Educativo con IA</p>
                 <h1 className="text-2xl md:text-3xl font-black text-slate-800 truncate pr-4">{topic}</h1>
             </div>
             <button onClick={() => setStatus(AppStatus.AUTH)} className="text-xs font-bold text-slate-400 bg-white px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">SALIR</button>
@@ -250,7 +255,7 @@ const App: React.FC = () => {
         </div>
       </div>
       <p className="font-black text-slate-800 text-xl">IA Analizando el Contenido...</p>
-      <p className="text-sm text-slate-400 mt-2 max-w-xs mx-auto">Estamos creando una aventura narrativa basada en tus documentos reales.</p>
+      <p className="text-sm text-slate-400 mt-2 max-w-xs mx-auto">Estamos usando Gemini 3 Pro para crear una aventura única y desafiante.</p>
     </ScreenWrapper>
   );
 
