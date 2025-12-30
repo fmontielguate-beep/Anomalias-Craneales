@@ -10,9 +10,7 @@ export async function generateCurriculum(
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = 'gemini-3-flash-preview';
 
-  const userPrompt = `Analiza este material sobre "${topic}". 
-  Crea un plan de 4 capítulos para un juego educativo.
-  Contenido: ${sourceContent}`;
+  const userPrompt = `Analiza material sobre "${topic}". Crea 3 capítulos educativos inspiradores. Contenido: ${sourceContent.substring(0, 3000)}`;
 
   try {
     const parts: any[] = [];
@@ -30,7 +28,7 @@ export async function generateCurriculum(
       model: modelName,
       contents: [{ parts }],
       config: {
-        systemInstruction: "Eres un profesor creativo. Diseña un currículo educativo de 4 capítulos en JSON. Cada capítulo debe tener un título divertido y temas claros extraídos del documento.",
+        systemInstruction: "Eres un arquitecto de mundos educativos. Diseña un currículo de 3 capítulos. Evita títulos genéricos. Usa metáforas relacionadas con el tema (ej: si es medicina, 'El Laberinto de las Arterias').",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -57,7 +55,7 @@ export async function generateCurriculum(
 
     return JSON.parse(response.text || "{}");
   } catch (error: any) {
-    throw new Error("No se pudo procesar el documento. Intenta con un texto más corto o un PDF más simple.");
+    throw new Error("Error de conexión.");
   }
 }
 
@@ -70,13 +68,21 @@ export async function generateChapterLevels(
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = 'gemini-3-flash-preview';
 
-  const userPrompt = `Genera un desafío de 5 niveles para el tema: "${chapter.title}".
+  const userPrompt = `Crea un desafío de Escape Room de 5 niveles para: "${chapter.title}".
   
-  ESTRUCTURA OBLIGATORIA:
-  - Nivel 1 y 2: PREGUNTAS DE CULTURA GENERAL (Geografía, Historia, Música, Literatura o Arte). No deben estar relacionadas con el PDF, son el "peaje" de acceso.
-  - Nivel 3, 4 y 5: PREGUNTAS ESPECÍFICAS sobre estos temas del PDF: ${chapter.topics.join(", ")}.
+  DIVERSIFICACIÓN OBLIGATORIA DE MECÁNICAS:
   
-  Contenido de referencia del PDF: ${sourceContent.substring(0, 4000)}`;
+  - NIVEL 1 y 2 (APERTURA CULTURAL): No repitas categorías. Elige 2 diferentes entre: Mitología Comparada, Inventos Perdidos, Etimología de Palabras Raras, Curiosidades del Cosmos o Dilemas Filosóficos.
+  
+  - NIVEL 3, 4 y 5 (CONTENIDO TÉCNICO DEL PDF): 
+    * No hagas solo preguntas de '¿Qué es...?'. 
+    * Usa 'Escenarios Críticos': 'Si el parámetro X sube, ¿qué pasaría con Y según el texto?'. 
+    * Usa 'Detectives de Errores': Presenta 3 verdades y 1 mentira sutil del PDF.
+    * Usa 'Analogías Creativas': Compara un concepto técnico con algo mundano para ver si se entendió la esencia.
+  
+  LA NARRATIVA: Cada nivel debe ocurrir en un lugar distinto (ej: Una cúpula de cristal, un bosque de hologramas, una sala de máquinas de vapor).
+  
+  Contenido: ${sourceContent.substring(0, 3000)}`;
 
   try {
     const parts: any[] = [];
@@ -94,7 +100,7 @@ export async function generateChapterLevels(
       model: modelName,
       contents: [{ parts }],
       config: {
-        systemInstruction: "Genera un JSON con un array de 5 objetos GameLevel. Los 2 primeros DEBEN ser de cultura general aleatoria. Los 3 últimos DEBEN ser sobre el contenido educativo proporcionado. Usa un tono de aventura de escape room.",
+        systemInstruction: "Genera 5 niveles únicos. Eres un Game Designer experto en pedagogía. Tu misión es que ninguna pregunta se parezca a la anterior en formato o estilo. La 'explanation' debe ser fascinante y conectar el dato con una utilidad real.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -102,8 +108,8 @@ export async function generateChapterLevels(
             type: Type.OBJECT,
             properties: {
               id: { type: Type.INTEGER },
-              category: { type: Type.STRING, description: "Ej: Geografía, Música, o el tema del capítulo" },
-              scenicDescription: { type: Type.STRING, description: "Ambientación narrativa breve" },
+              category: { type: Type.STRING },
+              scenicDescription: { type: Type.STRING },
               riddle: { type: Type.STRING },
               options: { type: Type.ARRAY, items: { type: Type.STRING } },
               correctAnswer: { type: Type.STRING },
@@ -112,7 +118,7 @@ export async function generateChapterLevels(
               knowledgeSnippet: { type: Type.STRING },
               congratulationMessage: { type: Type.STRING }
             },
-            required: ["id", "category", "riddle", "options", "correctAnswer", "hints", "explanation"]
+            required: ["id", "category", "riddle", "options", "correctAnswer", "hints", "explanation", "scenicDescription"]
           }
         }
       }
@@ -120,7 +126,6 @@ export async function generateChapterLevels(
 
     return JSON.parse(response.text || "[]");
   } catch (error: any) {
-    console.error("Gemini Error:", error);
-    throw new Error("Error al generar los niveles. Por favor, revisa tu conexión.");
+    throw new Error("Error al generar el desafío educativo.");
   }
 }

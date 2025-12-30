@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { soundService } from '../services/soundService';
 
 interface ButtonProps {
   children: React.ReactNode;
@@ -27,10 +28,15 @@ export const Button: React.FC<ButtonProps> = ({
     ghost: "bg-transparent hover:bg-indigo-50 text-slate-500 hover:text-indigo-600"
   };
 
+  const handleClick = () => {
+    soundService.playClick();
+    if (onClick) onClick();
+  };
+
   return (
     <button
       type={type}
-      onClick={onClick}
+      onClick={handleClick}
       disabled={disabled}
       className={`${baseStyles} ${variants[variant]} ${className}`}
     >
