@@ -7,20 +7,15 @@ export async function generateCurriculum(
   sourceContent: string,
   mediaFile?: FileData
 ): Promise<Curriculum> {
-  // Inicializamos dentro de la función para asegurar el uso de la API Key más reciente
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  // Usamos Pro para tareas de razonamiento complejo sobre documentos
-  const modelName = 'gemini-3-pro-preview';
+  const modelName = 'gemini-3-flash-preview';
 
-  const userPrompt = `Analiza detenidamente el material adjunto sobre "${topic}". 
-  Tu objetivo es diseñar un plan de estudios de 5 capítulos para un juego educativo. 
-  Cada capítulo debe cubrir un área temática distinta del material.
-  ${sourceContent ? `También considera este texto: ${sourceContent}` : ''}`;
+  const userPrompt = `Analiza este material sobre "${topic}". 
+  Crea un plan de 4 capítulos para un juego educativo.
+  Contenido: ${sourceContent}`;
 
   try {
     const parts: any[] = [];
-    
-    // IMPORTANTE: Primero enviamos el archivo para que la IA lo cargue en su memoria de contexto
     if (mediaFile) {
       parts.push({
         inlineData: {
@@ -29,15 +24,13 @@ export async function generateCurriculum(
         }
       });
     }
-
-    // Luego enviamos las instrucciones
     parts.push({ text: userPrompt });
 
     const response = await ai.models.generateContent({
       model: modelName,
       contents: [{ parts }],
       config: {
-        systemInstruction: "Eres un experto en pedagogía y gamificación. Tu misión es transformar documentos en currículos educativos estructurados en JSON. Sé creativo y preciso.",
+        systemInstruction: "Eres un profesor creativo. Diseña un currículo educativo de 4 capítulos en JSON. Cada capítulo debe tener un título divertido y temas claros extraídos del documento.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -62,15 +55,9 @@ export async function generateCurriculum(
       }
     });
 
-    const result = JSON.parse(response.text || "{}");
-    if (!result.chapters || result.chapters.length === 0) {
-      throw new Error("La IA no pudo extraer capítulos del material.");
-    }
-    return result;
+    return JSON.parse(response.text || "{}");
   } catch (error: any) {
-    console.error("Error en generateCurriculum:", error);
-    // Propagamos el error real para mostrarlo en la UI
-    throw new Error(error.message || "Fallo desconocido en la IA");
+    throw new Error("No se pudo procesar el documento. Intenta con un texto más corto o un PDF más simple.");
   }
 }
 
@@ -78,20 +65,21 @@ export async function generateChapterLevels(
   topic: string,
   chapter: Chapter,
   sourceContent: string,
-  mediaFile?: FileData,
-  isTrialMode: boolean = false
+  mediaFile?: FileData
 ): Promise<GameLevel[]> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const modelName = 'gemini-3-pro-preview';
-  const numLevels = isTrialMode ? 2 : 4;
+  const modelName = 'gemini-3-flash-preview';
 
-  const userPrompt = `Basándote en el material adjunto, genera ${numLevels} preguntas de examen tipo escape room para el capítulo: "${chapter.title}".
-  Temas específicos a evaluar: ${chapter.topics.join(", ")}.
-  Crea acertijos que requieran haber leído el material.`;
+  const userPrompt = `Genera un desafío de 5 niveles para el tema: "${chapter.title}".
+  
+  ESTRUCTURA OBLIGATORIA:
+  - Nivel 1 y 2: PREGUNTAS DE CULTURA GENERAL (Geografía, Historia, Música, Literatura o Arte). No deben estar relacionadas con el PDF, son el "peaje" de acceso.
+  - Nivel 3, 4 y 5: PREGUNTAS ESPECÍFICAS sobre estos temas del PDF: ${chapter.topics.join(", ")}.
+  
+  Contenido de referencia del PDF: ${sourceContent.substring(0, 4000)}`;
 
   try {
     const parts: any[] = [];
-    
     if (mediaFile) {
       parts.push({
         inlineData: {
@@ -100,14 +88,13 @@ export async function generateChapterLevels(
         }
       });
     }
-
     parts.push({ text: userPrompt });
 
     const response = await ai.models.generateContent({
       model: modelName,
       contents: [{ parts }],
       config: {
-        systemInstruction: `Diseña un juego de escape room. Debes generar exactamente ${numLevels} niveles en formato JSON.`,
+        systemInstruction: "Genera un JSON con un array de 5 objetos GameLevel. Los 2 primeros DEBEN ser de cultura general aleatoria. Los 3 últimos DEBEN ser sobre el contenido educativo proporcionado. Usa un tono de aventura de escape room.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -115,8 +102,8 @@ export async function generateChapterLevels(
             type: Type.OBJECT,
             properties: {
               id: { type: Type.INTEGER },
-              category: { type: Type.STRING },
-              scenicDescription: { type: Type.STRING },
+              category: { type: Type.STRING, description: "Ej: Geografía, Música, o el tema del capítulo" },
+              scenicDescription: { type: Type.STRING, description: "Ambientación narrativa breve" },
               riddle: { type: Type.STRING },
               options: { type: Type.ARRAY, items: { type: Type.STRING } },
               correctAnswer: { type: Type.STRING },
@@ -131,10 +118,9 @@ export async function generateChapterLevels(
       }
     });
 
-    const levels = JSON.parse(response.text || "[]");
-    return Array.isArray(levels) ? levels : [];
+    return JSON.parse(response.text || "[]");
   } catch (error: any) {
-    console.error("Error en generateChapterLevels:", error);
-    throw new Error(error.message || "Fallo al generar preguntas");
+    console.error("Gemini Error:", error);
+    throw new Error("Error al generar los niveles. Por favor, revisa tu conexión.");
   }
 }
