@@ -4,23 +4,31 @@ import { GameLevel, FileData, Chapter, Curriculum } from "../types";
 
 const extractJSON = (text: string): string => {
   let clean = text.trim();
-  if (clean.includes('```')) {
-    const match = clean.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (match && match[1]) {
-      clean = match[1];
-    }
+  
+  // Eliminar prefijos comunes que la IA a veces añade a pesar de las instrucciones
+  if (clean.startsWith("```json")) {
+    clean = clean.replace(/^```json/, "");
+  } else if (clean.startsWith("```")) {
+    clean = clean.replace(/^```/, "");
   }
+  
+  if (clean.endsWith("```")) {
+    clean = clean.replace(/```$/, "");
+  }
+
   const firstBrace = clean.indexOf('{');
   const lastBrace = clean.lastIndexOf('}');
   const firstBracket = clean.indexOf('[');
   const lastBracket = clean.lastIndexOf(']');
 
-  if (firstBrace !== -1 && lastBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
-    return clean.substring(firstBrace, lastBrace + 1);
-  } else if (firstBracket !== -1 && lastBracket !== -1) {
-    return clean.substring(firstBracket, lastBracket + 1);
+  // Determinar si es un objeto o un array buscando el primer delimitador válido
+  if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    if (lastBrace !== -1) return clean.substring(firstBrace, lastBrace + 1);
+  } else if (firstBracket !== -1) {
+    if (lastBracket !== -1) return clean.substring(firstBracket, lastBracket + 1);
   }
-  return clean;
+  
+  return clean.trim();
 };
 
 export async function generateCurriculum(
@@ -29,27 +37,34 @@ export async function generateCurriculum(
   mediaFile?: FileData
 ): Promise<Curriculum> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Usamos gemini-3-flash-preview por su gran capacidad de procesamiento de documentos y video
   const modelName = 'gemini-3-flash-preview';
 
-  const systemInstruction = `Eres un experto en educación y gamificación.
-  Tu misión es analizar el contenido proporcionado (que puede ser un PDF, un VIDEO o un TEXTO) y estructurar un plan de estudio de 6 capítulos para un juego.
-  Extrae los puntos clave más importantes.
-  Responde ÚNICAMENTE en formato JSON en español.`;
-
-  const userPrompt = `Analiza el material sobre "${topic}". 
-  ${sourceContent ? `Texto proporcionado: "${sourceContent.substring(0, 10000)}"` : 'Por favor, analiza el archivo adjunto (PDF o Video).'}
+  const systemInstruction = `Eres un Experto en Diseño Curricular y Gamificación. 
+  Tu tarea es extraer el conocimiento más relevante del material adjunto (PDF, Video o Texto) y organizarlo en 6 capítulos lógicos para un juego de escape room.
   
-  Genera un objeto JSON con esta estructura exacta:
+  REGLAS ESTRICTAS:
+  1. Idioma: Español.
+  2. Formato: ÚNICAMENTE JSON puro.
+  3. No añadidas explicaciones fuera del JSON.
+  4. Si es un video, analiza el audio y las imágenes.
+  5. Si es un PDF, lee todo el texto disponible.`;
+
+  const userPrompt = `Analiza el material sobre "${topic}" proporcionado en los archivos/texto adjuntos.
+  Crea un plan de 6 capítulos.
+  
+  ESTRUCTURA REQUERIDA:
   {
     "topic": "${topic}",
     "chapters": [
-      { "id": 1, "title": "Nombre del capítulo", "description": "Breve resumen", "topics": ["punto clave 1", "punto clave 2"] }
+      { "id": 1, "title": "Título del Capítulo", "description": "Descripción de lo que se aprenderá", "topics": ["tema 1", "tema 2"] }
     ]
-  }
-  Deben ser exactamente 6 capítulos.`;
+  }`;
 
   try {
-    const parts: any[] = [{ text: userPrompt }];
+    const parts: any[] = [];
+    
+    // El orden de las partes puede influir: primero el contenido pesado, luego la instrucción
     if (mediaFile) {
       parts.push({
         inlineData: {
@@ -58,10 +73,12 @@ export async function generateCurriculum(
         }
       });
     }
+    
+    parts.push({ text: sourceContent ? `CONTENIDO DE TEXTO ADICIONAL: ${sourceContent}\n\n${userPrompt}` : userPrompt });
 
     const response = await ai.models.generateContent({
       model: modelName,
-      contents: [{ parts }],
+      contents: { parts },
       config: {
         systemInstruction,
         responseMimeType: "application/json"
@@ -70,9 +87,15 @@ export async function generateCurriculum(
 
     const text = response.text || "";
     const cleanJSON = extractJSON(text);
-    return JSON.parse(cleanJSON);
+    const parsed = JSON.parse(cleanJSON);
+    
+    if (!parsed.chapters || !Array.isArray(parsed.chapters)) {
+      throw new Error("La respuesta de la IA no contiene capítulos válidos.");
+    }
+    
+    return parsed;
   } catch (error: any) {
-    console.error("Critical error in curriculum generation:", error);
+    console.error("Gemini Curriculum Error:", error);
     throw error;
   }
 }
@@ -86,18 +109,36 @@ export async function generateChapterLevels(
 ): Promise<GameLevel[]> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = 'gemini-3-flash-preview';
-  const numLevels = isTrialMode ? 4 : 6;
+  const numLevels = isTrialMode ? 3 : 5;
 
-  const systemInstruction = `Eres un Maestro de Escape Rooms. Tu tarea es generar ${numLevels} niveles de juego basados en el tema "${chapter.title}".
-  Debes basar las preguntas en la información del PDF, VIDEO o TEXTO proporcionado.
-  Idioma: Español. Responde solo con un ARRAY JSON.`;
+  const systemInstruction = `Eres un Maestro de Acertijos Educativos. 
+  Genera exactamente ${numLevels} niveles de juego para el capítulo "${chapter.title}".
+  Cada nivel debe ser un desafío basado en el contenido técnico del material adjunto.
+  
+  REGLAS:
+  1. Los acertijos deben ser inteligentes y educativos.
+  2. Idioma: Español.
+  3. Formato: ARRAY de objetos JSON.`;
 
-  const userPrompt = `Genera un array de ${numLevels} niveles JSON para el capítulo "${chapter.title}".
-  Cada objeto debe contener: id, category, scenicDescription, riddle, options(4), correctAnswer, hints(3), explanation, knowledgeSnippet, congratulationMessage.
-  Asegúrate de que las preguntas sean desafiantes y educativas.`;
+  const userPrompt = `Basándote en el material proporcionado, genera ${numLevels} desafíos para el tema: "${chapter.title}".
+  
+  FORMATO DE CADA OBJETO:
+  {
+    "id": número,
+    "category": "Tipo de Desafío",
+    "scenicDescription": "Ambientación breve",
+    "riddle": "El acertijo o pregunta",
+    "options": ["Opción A", "Opción B", "Opción C", "Opción D"],
+    "correctAnswer": "La opción exacta",
+    "hints": ["Pista 1", "Pista 2", "Pista 3"],
+    "explanation": "Explicación educativa",
+    "knowledgeSnippet": "Dato clave recordable",
+    "congratulationMessage": "Mensaje de éxito"
+  }`;
 
   try {
-    const parts: any[] = [{ text: userPrompt }];
+    const parts: any[] = [];
+    
     if (mediaFile) {
       parts.push({
         inlineData: {
@@ -107,9 +148,11 @@ export async function generateChapterLevels(
       });
     }
 
+    parts.push({ text: `CAPÍTULO ACTUAL: ${chapter.title}. TEMAS: ${chapter.topics.join(", ")}.\n\n${userPrompt}` });
+
     const response = await ai.models.generateContent({
       model: modelName,
-      contents: [{ parts }],
+      contents: { parts },
       config: {
         systemInstruction,
         responseMimeType: "application/json"
@@ -119,9 +162,10 @@ export async function generateChapterLevels(
     const text = response.text || "";
     const cleanJSON = extractJSON(text);
     const levels = JSON.parse(cleanJSON);
+    
     return Array.isArray(levels) ? levels : [];
   } catch (error: any) {
-    console.error("Critical error in levels generation:", error);
+    console.error("Gemini Levels Error:", error);
     throw error;
   }
 }

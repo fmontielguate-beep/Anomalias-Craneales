@@ -58,22 +58,27 @@ const App: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validar tamaño aproximado (evitar bloqueos por archivos gigantes)
-    if (file.size > 20 * 1024 * 1024) {
-      setError("El archivo es demasiado grande (Máx 20MB).");
+    // Límite razonable para la API
+    if (file.size > 15 * 1024 * 1024) {
+      setError("El archivo es demasiado grande (Máximo 15MB recomendado).");
       return;
     }
 
     const reader = new FileReader();
     reader.onload = () => {
-      const base64 = (reader.result as string).split(',')[1];
-      setSelectedFileData({ data: base64, mimeType: file.type });
-      setTopic(file.name.replace(/\.[^/.]+$/, ""));
-      setError('');
+      try {
+        const result = reader.result as string;
+        const base64 = result.split(',')[1];
+        if (!base64) throw new Error("Fallo al codificar archivo.");
+        
+        setSelectedFileData({ data: base64, mimeType: file.type });
+        setTopic(file.name.replace(/\.[^/.]+$/, ""));
+        setError('');
+      } catch (e) {
+        setError("Error procesando el archivo localmente.");
+      }
     };
-    reader.onerror = () => {
-      setError("Error al leer el archivo.");
-    };
+    reader.onerror = () => setError("Error al leer el archivo.");
     reader.readAsDataURL(file);
   };
 
@@ -85,13 +90,13 @@ const App: React.FC = () => {
 
     try {
       const syllabus = await generateCurriculum(
-        topic || "Nueva Misión",
+        topic || "Misión de Aprendizaje",
         inputValue,
         selectedFileData || undefined
       );
       
       if (!syllabus?.chapters || syllabus.chapters.length === 0) {
-        throw new Error("Formato inválido");
+        throw new Error("La IA no devolvió un formato válido.");
       }
 
       syllabus.chapters = syllabus.chapters.map((c, i) => ({
@@ -103,8 +108,16 @@ const App: React.FC = () => {
       setTopic(syllabus.topic);
       setStatus(AppStatus.CURRICULUM_MAP);
     } catch (err: any) {
-      console.error("General Process Error:", err);
-      setError("No se pudo procesar el material. Asegúrate de que no tenga contraseña y sea legible.");
+      console.error("Detailed Curriculum Error:", err);
+      // Mensaje más específico basado en el error si es posible
+      const errorMsg = err.message?.toLowerCase();
+      if (errorMsg?.includes("json") || errorMsg?.includes("parsing")) {
+        setError("La IA no pudo estructurar los datos correctamente. Intenta con otro archivo.");
+      } else if (errorMsg?.includes("api key")) {
+        setError("Error de autenticación. Revisa la API Key.");
+      } else {
+        setError("No se pudo procesar el material. Asegúrate de que no sea muy extenso y sea legible.");
+      }
       setStatus(AppStatus.IDLE);
     } finally {
       setIsProcessing(false);
@@ -127,13 +140,13 @@ const App: React.FC = () => {
         isTrialMode
       );
       
-      if (!chapterLevels || chapterLevels.length === 0) throw new Error("Vacio");
+      if (!chapterLevels || chapterLevels.length === 0) throw new Error("No se generaron niveles.");
       
       setLevels(chapterLevels);
       setStatus(AppStatus.PREVIEW);
     } catch (err: any) {
-      console.error("Levels Generation Error:", err);
-      setError("Hubo un error construyendo la sala. Prueba con otro capítulo.");
+      console.error("Detailed Levels Error:", err);
+      setError("Error al generar desafíos para esta sala.");
       setStatus(AppStatus.ERROR);
     } finally {
       setIsProcessing(false);
@@ -272,7 +285,7 @@ const App: React.FC = () => {
               <span className="bg-[#FFD93D] px-4 py-1 rounded-full font-black text-[10px] uppercase shadow-sm">MAPA DE MISIONES</span>
               <h1 className="text-4xl md:text-5xl font-cinzel font-black text-slate-800 mt-2 truncate max-w-md">{topic}</h1>
             </div>
-            <Button onClick={() => setStatus(AppStatus.IDLE)} variant="secondary" className="rounded-xl px-4 py-3 font-black text-[10px] uppercase border-2 shadow-sm">CAMBIAR TEMA</Button>
+            <Button onClick={() => setStatus(AppStatus.IDLE)} variant="secondary" className="rounded-xl px-4 py-3 font-black text-[10px] uppercase border-2 shadow-sm">NUEVO MATERIAL</Button>
           </header>
 
           <div className="flex-grow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scroll pb-6">
