@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { GameLevel, FileData, Chapter, Curriculum } from "../types";
 
-// Usamos Gemini 3 Pro para máxima creatividad y razonamiento complejo
+// Usamos Gemini 3 Pro para máxima creatividad y razonamiento multimodal (PDF, Texto y VIDEO)
 const MODEL_NAME = 'gemini-3-pro-preview';
 
 export async function generateCurriculum(
@@ -12,7 +12,10 @@ export async function generateCurriculum(
 ): Promise<Curriculum> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  const userPrompt = `Analiza material sobre "${topic}". Crea 3 capítulos educativos inspiradores. Contenido: ${sourceContent.substring(0, 4000)}`;
+  const userPrompt = `Analiza detalladamente el material sobre "${topic}". El material puede ser un texto o un archivo multimedia (video/PDF).
+  Extrae los conceptos fundamentales y crea un currículo educativo de 3 capítulos. 
+  Si es un video, ten en cuenta los diálogos y las escenas clave.
+  Contenido adicional: ${sourceContent.substring(0, 4000)}`;
 
   try {
     const parts: any[] = [];
@@ -30,7 +33,8 @@ export async function generateCurriculum(
       model: MODEL_NAME,
       contents: [{ parts }],
       config: {
-        systemInstruction: "Eres un arquitecto de mundos educativos de élite. Diseña un currículo de 3 capítulos. Usa títulos cinematográficos y metáforas profundas. Asegúrate de que los temas cubran los puntos más críticos del material proporcionado.",
+        systemInstruction: "Eres un arquitecto de mundos educativos multimodal. Tu misión es transformar cualquier tipo de material (texto, PDF o VIDEO) en una estructura de aprendizaje fascinante. Usa títulos cinematográficos y asegúrate de que cada capítulo sea una progresión lógica del conocimiento.",
+        thinkingConfig: { thinkingBudget: 4000 },
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -70,18 +74,16 @@ export async function generateChapterLevels(
 ): Promise<GameLevel[]> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  const userPrompt = `Crea un desafío de Escape Room de 5 niveles para: "${chapter.title}".
+  const userPrompt = `Crea un desafío de Escape Room de 5 niveles para el capítulo: "${chapter.title}".
   
-  REGLAS DE ORO PARA LA VARIEDAD (USA TU MÁXIMO RAZONAMIENTO):
+  EL MATERIAL DE ORIGEN: Puede ser texto o un VIDEO/PDF. Si es un video, crea retos basados en lo que se ve o se dice en él.
   
-  - NIVELES DE APERTURA (1 y 2): Deben ser "ganchos" culturales fascinantes. No repitas temas. Elige entre: Paradojas temporales, enigmas de civilizaciones antiguas, secretos de la naturaleza o hitos de la ingeniería.
-  
-  - NIVELES TÉCNICOS (3, 4 y 5): Basados estrictamente en el PDF/Texto.
-    * Nivel 3: 'El Dilema' (Presenta un problema práctico que solo se resuelve con un concepto del texto).
-    * Nivel 4: 'La Mentira sutil' (Identifica qué dato es falso entre 4 afirmaciones técnicas muy similares).
-    * Nivel 5: 'La Gran Conexión' (Relaciona el concepto más difícil del texto con un escenario futurista o hipotético).
-  
-  - LENGUAJE: Usa un tono de "Maestro de Juegos" misterioso pero alentador.
+  REGLAS DE VARIEDAD:
+  - NIVELES 1-2 (CONEXIÓN): Ganchos culturales o curiosidades relacionadas con el tema del capítulo.
+  - NIVELES 3-5 (DOMINIO): Retos técnicos basados directamente en el material (si es video, usa escenas o datos específicos mencionados).
+    * Nivel 3: 'El Dilema Visual/Técnico'.
+    * Nivel 4: 'Detector de Errores'.
+    * Nivel 5: 'La Gran Conexión Final'.
   
   Contenido: ${sourceContent.substring(0, 4000)}`;
 
@@ -101,8 +103,8 @@ export async function generateChapterLevels(
       model: MODEL_NAME,
       contents: [{ parts }],
       config: {
-        systemInstruction: "Genera 5 niveles con mecánicas de juego totalmente distintas. Eres un diseñador de Escape Rooms profesional. Cada 'riddle' debe ser un desafío mental. La 'explanation' debe ser pedagógicamente rica, explicando el 'por qué' detrás de la respuesta correcta.",
-        thinkingConfig: { thinkingBudget: 2000 }, // Permitimos que la IA piense para crear mejores acertijos
+        systemInstruction: "Genera 5 niveles únicos. Eres un experto en pedagogía y diseño de juegos. Si el material incluye video, aprovecha la información visual y auditiva para crear acertijos inmersivos. La 'explanation' debe ser enriquecedora.",
+        thinkingConfig: { thinkingBudget: 8000 },
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
