@@ -2,50 +2,20 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { GameLevel, FileData, Chapter, Curriculum } from "../types";
 
-const extractJSON = (text: string): string => {
-  let clean = text.trim();
-  
-  // Limpieza agresiva de bloques de código
-  clean = clean.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").replace(/^```\s*/i, "");
-  
-  const firstBrace = clean.indexOf('{');
-  const lastBrace = clean.lastIndexOf('}');
-  const firstBracket = clean.indexOf('[');
-  const lastBracket = clean.lastIndexOf(']');
-
-  if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
-    if (lastBrace !== -1) return clean.substring(firstBrace, lastBrace + 1);
-  } else if (firstBracket !== -1) {
-    if (lastBracket !== -1) return clean.substring(firstBracket, lastBracket + 1);
-  }
-  
-  return clean.trim();
-};
-
 export async function generateCurriculum(
   topic: string,
   sourceContent: string,
   mediaFile?: FileData
 ): Promise<Curriculum> {
-  // Usamos gemini-flash-latest por ser el más robusto y disponible universalmente
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const modelName = 'gemini-flash-latest';
+  const modelName = 'gemini-3-flash-preview';
 
-  const systemInstruction = `Eres un Experto en Educación. Analiza el material adjunto y crea un mapa de 5 capítulos para un juego.
-  REGLA DE ORO: Responde SOLO con JSON en ESPAÑOL. No incluyas texto explicativo fuera del JSON.`;
-
-  const userPrompt = `Analiza el material de "${topic}".
-  Estructura de respuesta:
-  {
-    "topic": "${topic}",
-    "chapters": [
-      { "id": 1, "title": "Nombre", "description": "Resumen corto", "topics": ["tema1"] }
-    ]
-  }
-  Crea exactamente 5 capítulos basados en el contenido.`;
+  const userPrompt = `Analiza el material sobre "${topic}". 
+  Extrae los conceptos fundamentales y organízalos en una secuencia de aprendizaje de 5 capítulos.
+  ${sourceContent ? `Usa también este texto: ${sourceContent}` : ''}`;
 
   try {
-    const parts: any[] = [];
+    const parts: any[] = [{ text: userPrompt }];
     if (mediaFile) {
       parts.push({
         inlineData: {
@@ -54,23 +24,42 @@ export async function generateCurriculum(
         }
       });
     }
-    parts.push({ text: sourceContent ? `CONTENIDO: ${sourceContent}\n\n${userPrompt}` : userPrompt });
 
     const response = await ai.models.generateContent({
       model: modelName,
       contents: [{ parts }],
       config: {
-        systemInstruction,
-        responseMimeType: "application/json"
+        systemInstruction: "Eres un experto en pedagogía. Analiza el archivo adjunto y genera un currículo educativo de 5 capítulos en JSON.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            topic: { type: Type.STRING },
+            chapters: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.INTEGER },
+                  title: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  topics: { type: Type.ARRAY, items: { type: Type.STRING } }
+                },
+                required: ["id", "title", "description", "topics"]
+              }
+            }
+          },
+          required: ["topic", "chapters"]
+        }
       }
     });
 
-    const text = response.text || "";
-    const cleanJSON = extractJSON(text);
-    return JSON.parse(cleanJSON);
+    const result = JSON.parse(response.text || "{}");
+    if (!result.chapters) throw new Error("Respuesta incompleta");
+    return result;
   } catch (error: any) {
-    console.error("Curriculum Error:", error);
-    throw new Error("No se pudo analizar el contenido. Prueba con un archivo más pequeño.");
+    console.error("Critical Curriculum Error:", error);
+    throw error;
   }
 }
 
@@ -82,17 +71,14 @@ export async function generateChapterLevels(
   isTrialMode: boolean = false
 ): Promise<GameLevel[]> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const modelName = 'gemini-flash-latest';
-  const numLevels = isTrialMode ? 3 : 4;
+  const modelName = 'gemini-3-flash-preview';
+  const numLevels = isTrialMode ? 3 : 5;
 
-  const systemInstruction = `Eres un Maestro de Acertijos. Genera ${numLevels} desafíos basados en el tema "${chapter.title}".
-  Responde SOLO con un ARRAY JSON en ESPAÑOL.`;
-
-  const userPrompt = `Genera un array JSON de ${numLevels} niveles para el tema "${chapter.title}".
-  Cada nivel debe tener: id, category, scenicDescription, riddle, options(4), correctAnswer, hints(3), explanation, knowledgeSnippet, congratulationMessage.`;
+  const userPrompt = `Basándote en el material adjunto, genera ${numLevels} preguntas de opción múltiple sobre "${chapter.title}".
+  Los temas a cubrir son: ${chapter.topics.join(", ")}.`;
 
   try {
-    const parts: any[] = [];
+    const parts: any[] = [{ text: userPrompt }];
     if (mediaFile) {
       parts.push({
         inlineData: {
@@ -101,23 +87,38 @@ export async function generateChapterLevels(
         }
       });
     }
-    parts.push({ text: `TEMAS: ${chapter.topics.join(", ")}.\n\n${userPrompt}` });
 
     const response = await ai.models.generateContent({
       model: modelName,
       contents: [{ parts }],
       config: {
-        systemInstruction,
-        responseMimeType: "application/json"
+        systemInstruction: `Eres un diseñador de acertijos para un escape room. Crea ${numLevels} niveles desafiantes.`,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.INTEGER },
+              category: { type: Type.STRING },
+              scenicDescription: { type: Type.STRING },
+              riddle: { type: Type.STRING },
+              options: { type: Type.ARRAY, items: { type: Type.STRING } },
+              correctAnswer: { type: Type.STRING },
+              hints: { type: Type.ARRAY, items: { type: Type.STRING } },
+              explanation: { type: Type.STRING },
+              knowledgeSnippet: { type: Type.STRING },
+              congratulationMessage: { type: Type.STRING }
+            },
+            required: ["id", "category", "riddle", "options", "correctAnswer", "hints", "explanation"]
+          }
+        }
       }
     });
 
-    const text = response.text || "";
-    const cleanJSON = extractJSON(text);
-    const levels = JSON.parse(cleanJSON);
-    return Array.isArray(levels) ? levels : [];
+    return JSON.parse(response.text || "[]");
   } catch (error: any) {
-    console.error("Levels Error:", error);
-    throw new Error("Error al crear los desafíos.");
+    console.error("Critical Levels Error:", error);
+    throw error;
   }
 }

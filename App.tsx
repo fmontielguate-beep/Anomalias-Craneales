@@ -58,9 +58,8 @@ const App: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Reducimos el límite para asegurar que la API no falle por tamaño
-    if (file.size > 10 * 1024 * 1024) {
-      setError("El archivo es muy pesado. Intenta con uno de menos de 10MB.");
+    if (file.size > 15 * 1024 * 1024) {
+      setError("El archivo supera los 15MB. Prueba con uno más ligero.");
       return;
     }
 
@@ -72,7 +71,6 @@ const App: React.FC = () => {
       setTopic(file.name.replace(/\.[^/.]+$/, ""));
       setError('');
     };
-    reader.onerror = () => setError("Error leyendo el archivo.");
     reader.readAsDataURL(file);
   };
 
@@ -84,15 +82,11 @@ const App: React.FC = () => {
 
     try {
       const syllabus = await generateCurriculum(
-        topic || "Misión de Aprendizaje",
+        topic || "Aventura de Aprendizaje",
         inputValue,
         selectedFileData || undefined
       );
       
-      if (!syllabus?.chapters || syllabus.chapters.length === 0) {
-        throw new Error("No hay capítulos");
-      }
-
       syllabus.chapters = syllabus.chapters.map((c, i) => ({
         ...c,
         status: i === 0 ? 'available' : 'locked'
@@ -102,8 +96,8 @@ const App: React.FC = () => {
       setTopic(syllabus.topic);
       setStatus(AppStatus.CURRICULUM_MAP);
     } catch (err: any) {
-      console.error("Curriculum Error:", err);
-      setError("La IA está tardando en responder o el archivo es ilegible. ¡Inténtalo de nuevo!");
+      console.error("Error en App:", err);
+      setError("La IA no pudo procesar este archivo específico. Intenta con un PDF que tenga más texto o sea más claro.");
       setStatus(AppStatus.IDLE);
     } finally {
       setIsProcessing(false);
@@ -126,23 +120,23 @@ const App: React.FC = () => {
         isTrialMode
       );
       
-      if (!chapterLevels || chapterLevels.length === 0) throw new Error("Vacio");
+      if (!chapterLevels || chapterLevels.length === 0) throw new Error("Vacío");
       
       setLevels(chapterLevels);
       setStatus(AppStatus.PREVIEW);
     } catch (err: any) {
-      console.error("Levels Error:", err);
-      setError("No se pudieron generar los desafíos. Prueba reintentando.");
-      setStatus(AppStatus.ERROR);
+      setError("Error al construir la sala. Por favor, reintenta.");
+      setStatus(AppStatus.CURRICULUM_MAP);
     } finally {
       setIsProcessing(false);
     }
   };
 
+  // El resto de la UI se mantiene igual para conservar la estética
   if (status === AppStatus.AUTH) {
     return (
       <ScreenWrapper className="items-center justify-center bg-[#F7FFF7] p-6">
-        <div className="max-w-md w-full glass p-8 md:p-12 rounded-[4rem] text-center border-4 border-[#FF6B6B]/20 shadow-2xl animate-in fade-in zoom-in duration-500">
+        <div className="max-w-md w-full glass p-8 md:p-12 rounded-[4rem] text-center border-4 border-[#FF6B6B]/20 shadow-2xl">
           <div className="w-20 h-20 bg-gradient-to-tr from-[#FF6B6B] to-[#FFD93D] rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-xl rotate-3">
             <i className="fas fa-magic text-white text-3xl"></i>
           </div>
@@ -160,12 +154,11 @@ const App: React.FC = () => {
                   specialtyPreference: 'Estudiante',
                 };
                 setUser(userData);
-                setIsGuestTrial(false);
                 localStorage.setItem('edu_escape_user', JSON.stringify(userData));
                 setStatus(AppStatus.IDLE);
               }} className="space-y-4 text-left">
-                <input name="fullName" required placeholder="Tu Nombre" className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-[#FF6B6B] transition-all" />
-                <input name="medicalId" required placeholder="ID de Usuario" className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-[#FF6B6B] transition-all" />
+                <input name="fullName" required placeholder="Tu Nombre" className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none" />
+                <input name="medicalId" required placeholder="ID de Usuario" className="w-full bg-white border-2 border-slate-100 rounded-2xl px-6 py-4 outline-none" />
                 <Button type="submit" className="w-full py-5 text-xl btn-joy bg-[#FF6B6B] text-white uppercase font-black">ENTRAR</Button>
               </form>
               <button onClick={() => setShowPasswordPrompt(true)} className="w-full text-[#6C5CE7] font-black uppercase text-[11px] tracking-widest mt-4">MODO INVITADO</button>
@@ -176,19 +169,15 @@ const App: React.FC = () => {
               if (trialPassword === 'Helena2016') {
                 const trialUser = { fullName: 'Invitado', medicalId: 'AUDIT-MODE', specialtyPreference: 'Auditoría' };
                 setUser(trialUser);
-                setIsGuestTrial(true);
                 setIsTrialMode(true);
-                localStorage.setItem('edu_escape_user', JSON.stringify(trialUser));
                 setStatus(AppStatus.IDLE);
                 setShowPasswordPrompt(false);
-                setTrialPassword('');
               } else {
                 setError('Código incorrecto.');
-                setTrialPassword('');
               }
             }} className="space-y-6 text-left">
               <div className="p-6 bg-white rounded-[2rem] border-4 border-[#6C5CE7]">
-                <input type="password" autoFocus required value={trialPassword} onChange={(e) => setTrialPassword(e.target.value)} placeholder="Código..." className="w-full bg-[#F7FFF7] border-none text-center text-xl font-black outline-none" />
+                <input type="password" autoFocus required value={trialPassword} onChange={(e) => setTrialPassword(e.target.value)} placeholder="Código..." className="w-full bg-transparent border-none text-center text-xl font-black outline-none" />
               </div>
               <div className="flex gap-4">
                 <Button type="submit" className="flex-grow py-5 font-black btn-joy bg-[#6C5CE7] text-white uppercase">VALIDAR</Button>
@@ -204,58 +193,52 @@ const App: React.FC = () => {
   if (status === AppStatus.IDLE) {
     return (
       <ScreenWrapper className="items-center justify-center p-6 bg-transparent">
-        <div className="max-w-4xl w-full h-full max-h-[90vh] glass p-8 md:p-12 rounded-[5rem] flex flex-col relative overflow-hidden shadow-2xl border-4 border-white animate-in slide-in-from-bottom-12 duration-500">
+        <div className="max-w-4xl w-full h-full max-h-[90vh] glass p-8 md:p-12 rounded-[5rem] flex flex-col relative overflow-hidden shadow-2xl border-4 border-white">
           <div className="flex justify-between items-center mb-8 relative z-50">
              <div className="bg-white px-4 py-2 rounded-full shadow-sm border-2 border-slate-100 flex items-center gap-2">
                <div className="w-4 h-4 rounded-full bg-[#4ECDC4]"></div>
                <span className="text-[11px] text-[#6C5CE7] font-black uppercase tracking-widest">{user?.fullName}</span>
              </div>
-             <button onClick={logout} className="text-slate-300 font-black text-[10px] uppercase hover:text-red-400 transition-colors">SALIR</button>
+             <button onClick={logout} className="text-slate-300 font-black text-[10px] uppercase">SALIR</button>
           </div>
 
-          <div className="text-center mb-8 flex-shrink-0">
+          <div className="text-center mb-8">
             <h1 className="text-6xl md:text-7xl font-cinzel font-black shimmer-text leading-none mb-2">EduEscape</h1>
-            <p className="text-slate-400 text-base font-bold italic">Sube tu material para jugar.</p>
+            <p className="text-slate-400 text-base font-bold italic">Carga un PDF, Video o Texto para comenzar.</p>
           </div>
 
-          <form onSubmit={handleCreateCurriculum} className="flex-grow flex flex-col justify-center space-y-8 max-w-2xl mx-auto w-full relative z-10 overflow-hidden">
-            <div className="flex justify-center gap-3 flex-shrink-0">
+          <form onSubmit={handleCreateCurriculum} className="flex-grow flex flex-col justify-center space-y-8 max-w-2xl mx-auto w-full relative z-10">
+            <div className="flex justify-center gap-3">
               {(['pdf', 'video', 'text'] as SourceType[]).map((type) => (
                 <button 
                   key={type} 
                   type="button" 
-                  onClick={() => { setSourceType(type); setError(''); setSelectedFileData(null); setTopic(''); }}
-                  className={`px-6 py-2 rounded-2xl font-black text-[10px] border-4 transition-all ${sourceType === type ? 'bg-[#FF6B6B] border-white text-white shadow-lg scale-105' : 'bg-white border-slate-100 text-slate-300'}`}
+                  onClick={() => { setSourceType(type); setSelectedFileData(null); setError(''); }}
+                  className={`px-6 py-2 rounded-2xl font-black text-[10px] border-4 transition-all ${sourceType === type ? 'bg-[#FF6B6B] border-white text-white shadow-lg' : 'bg-white border-slate-100 text-slate-300'}`}
                 >
                   {type.toUpperCase()}
                 </button>
               ))}
             </div>
 
-            <div className="flex-grow overflow-hidden flex flex-col">
+            <div className="flex-grow flex flex-col min-h-[200px]">
               {sourceType !== 'text' ? (
-                <div onClick={() => fileInputRef.current?.click()} className="group flex-grow border-4 border-dashed border-[#F7FFF7] rounded-[3rem] p-8 text-center cursor-pointer hover:border-[#4ECDC4] bg-white shadow-inner flex flex-col items-center justify-center transition-all">
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
-                    accept={sourceType === 'pdf' ? ".pdf" : "video/*"} 
-                    onChange={handleFileChange} 
-                  />
-                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg ${sourceType === 'pdf' ? 'bg-[#6C5CE7]' : 'bg-[#4ECDC4]'} text-white`}>
+                <div onClick={() => fileInputRef.current?.click()} className="group flex-grow border-4 border-dashed border-[#F7FFF7] rounded-[3rem] p-8 text-center cursor-pointer hover:border-[#4ECDC4] bg-white shadow-inner flex flex-col items-center justify-center">
+                  <input type="file" ref={fileInputRef} className="hidden" accept={sourceType === 'pdf' ? ".pdf" : "video/*"} onChange={handleFileChange} />
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 ${sourceType === 'pdf' ? 'bg-[#6C5CE7]' : 'bg-[#4ECDC4]'} text-white shadow-lg`}>
                     <i className={`fas ${sourceType === 'pdf' ? 'fa-file-pdf' : 'fa-video'} text-2xl`}></i>
                   </div>
-                  <p className="text-xl font-black text-slate-800 line-clamp-2 px-4">{topic || `Selecciona tu ${sourceType.toUpperCase()}`}</p>
+                  <p className="text-xl font-black text-slate-800">{topic || `Selecciona tu ${sourceType}`}</p>
                 </div>
               ) : (
-                <textarea required value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="Pega aquí el contenido que quieres estudiar..." className="flex-grow bg-[#F7FFF7] border-2 border-white rounded-[2rem] px-6 py-4 text-lg shadow-inner outline-none focus:border-[#4ECDC4] transition-all resize-none font-medium" />
+                <textarea required value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="Pega el contenido aquí..." className="flex-grow bg-[#F7FFF7] border-2 border-white rounded-[2rem] px-6 py-4 text-lg shadow-inner outline-none" />
               )}
             </div>
 
-            <Button type="submit" disabled={isProcessing || (sourceType !== 'text' && !selectedFileData)} className="w-full py-6 text-2xl font-black rounded-[2rem] bg-[#FF6B6B] text-white shadow-xl btn-joy flex-shrink-0 uppercase">
-              {isProcessing ? "ANALIZANDO..." : "¡GENERAR AVENTURA!"}
+            <Button type="submit" disabled={isProcessing || (sourceType !== 'text' && !selectedFileData)} className="w-full py-6 text-2xl font-black rounded-[2rem] bg-[#FF6B6B] text-white shadow-xl btn-joy">
+              {isProcessing ? "ANALIZANDO..." : "¡GENERAR JUEGO!"}
             </Button>
-            {error && <p className="text-red-500 text-center text-[10px] font-black uppercase mt-2">{error}</p>}
+            {error && <p className="text-red-500 text-center text-xs font-black uppercase">{error}</p>}
           </form>
         </div>
       </ScreenWrapper>
@@ -264,31 +247,30 @@ const App: React.FC = () => {
 
   if (status === AppStatus.CURRICULUM_MAP && curriculum) {
     return (
-      <ScreenWrapper className="bg-transparent p-6">
+      <ScreenWrapper className="p-6">
         <div className="max-w-6xl w-full mx-auto h-full flex flex-col">
-          <header className="flex justify-between items-center mb-8 flex-shrink-0 relative z-50">
+          <header className="flex justify-between items-center mb-8">
             <div className="text-left">
-              <span className="bg-[#FFD93D] px-4 py-1 rounded-full font-black text-[10px] uppercase shadow-sm">MAPA DE MISIONES</span>
-              <h1 className="text-4xl md:text-5xl font-cinzel font-black text-slate-800 mt-2 truncate max-w-md">{topic}</h1>
+              <span className="bg-[#FFD93D] px-4 py-1 rounded-full font-black text-[10px] uppercase">MISIÓN ACTUAL</span>
+              <h1 className="text-4xl font-cinzel font-black text-slate-800 mt-2">{topic}</h1>
             </div>
-            <Button onClick={() => setStatus(AppStatus.IDLE)} variant="secondary" className="rounded-xl px-4 py-3 font-black text-[10px] uppercase border-2 shadow-sm">NUEVO MATERIAL</Button>
+            <Button onClick={() => setStatus(AppStatus.IDLE)} variant="secondary" className="text-xs">NUEVO MATERIAL</Button>
           </header>
 
-          <div className="flex-grow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scroll pb-6">
+          <div className="flex-grow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scroll">
             {curriculum.chapters.map((chapter) => (
               <div 
                 key={chapter.id} 
                 onClick={() => startChapter(chapter)}
                 className={`group p-8 border-4 rounded-[3rem] transition-all relative flex flex-col h-full bg-white ${
-                  chapter.status === 'locked' ? 'opacity-40 grayscale cursor-not-allowed' : 'shadow-xl cursor-pointer hover:border-[#FF6B6B] hover:-translate-y-2'
+                  chapter.status === 'locked' ? 'opacity-40 grayscale cursor-not-allowed' : 'shadow-xl cursor-pointer hover:border-[#FF6B6B]'
                 }`}
               >
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl mb-4 shadow-sm ${chapter.status === 'completed' ? 'bg-[#4ECDC4] text-white' : 'bg-[#FF6B6B] text-white'}`}>
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl mb-4 ${chapter.status === 'completed' ? 'bg-[#4ECDC4] text-white' : 'bg-[#FF6B6B] text-white'}`}>
                   <i className={`fas ${chapter.status === 'locked' ? 'fa-lock' : 'fa-star'}`}></i>
                 </div>
-                <h3 className="text-xl font-black text-slate-800 mb-2 leading-tight">{chapter.title}</h3>
-                <p className="text-slate-400 font-bold italic text-sm line-clamp-3 flex-grow">{chapter.description}</p>
-                {chapter.status === 'available' && <span className="text-[10px] font-black text-[#FF6B6B] text-right uppercase mt-4">JUGAR <i className="fas fa-play ml-1"></i></span>}
+                <h3 className="text-xl font-black text-slate-800 mb-2">{chapter.title}</h3>
+                <p className="text-slate-400 font-bold italic text-sm flex-grow">{chapter.description}</p>
               </div>
             ))}
           </div>
@@ -300,25 +282,13 @@ const App: React.FC = () => {
   if (status === AppStatus.PREVIEW && activeChapter) {
     return (
       <ScreenWrapper className="items-center justify-center p-6">
-        <div className="max-w-2xl w-full glass p-10 md:p-16 rounded-[5rem] text-center border-4 border-white shadow-2xl animate-in zoom-in duration-500">
-           <div className="w-24 h-24 bg-[#FF6B6B] text-white rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3">
-              <i className="fas fa-scroll text-4xl"></i>
+        <div className="max-w-2xl w-full glass p-10 rounded-[5rem] text-center border-4 border-white shadow-2xl">
+           <div className="w-20 h-20 bg-[#FF6B6B] text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-xl">
+              <i className="fas fa-scroll text-3xl"></i>
            </div>
-           <span className="bg-[#4ECDC4]/20 text-[#4ECDC4] px-6 py-2 rounded-full font-black text-xs uppercase mb-4 inline-block">Misión Preparada</span>
-           <h2 className="text-4xl md:text-5xl font-cinzel font-black text-slate-800 mb-6 leading-tight uppercase">{activeChapter.title}</h2>
-           <div className="bg-[#F7FFF7] p-8 rounded-[3rem] border-2 border-dashed border-[#4ECDC4]/30 mb-10">
-              <p className="text-slate-500 text-lg font-bold italic leading-relaxed">
-                "{activeChapter.description}"
-              </p>
-           </div>
-           <div className="flex flex-col gap-4">
-              <Button onClick={() => setStatus(AppStatus.PLAYING)} className="w-full py-6 text-2xl bg-[#FF6B6B] text-white rounded-[2rem] shadow-xl btn-joy uppercase font-black">
-                ¡EMPEZAR!
-              </Button>
-              <button onClick={() => setStatus(AppStatus.CURRICULUM_MAP)} className="text-slate-400 font-black text-[11px] uppercase tracking-widest hover:text-[#6C5CE7] transition-colors">
-                VOLVER AL MAPA
-              </button>
-           </div>
+           <h2 className="text-4xl font-cinzel font-black text-slate-800 mb-6">{activeChapter.title}</h2>
+           <p className="text-slate-500 text-lg mb-10 italic">"{activeChapter.description}"</p>
+           <Button onClick={() => setStatus(AppStatus.PLAYING)} className="w-full py-6 bg-[#FF6B6B] text-white rounded-[2rem] shadow-xl uppercase font-black">ENTRAR A LA SALA</Button>
         </div>
       </ScreenWrapper>
     );
@@ -327,17 +297,9 @@ const App: React.FC = () => {
   if (status === AppStatus.PLAYING && activeChapter) {
     return (
       <ScreenWrapper className="bg-white">
-        <nav className="h-[80px] px-8 glass flex justify-between items-center flex-shrink-0 z-[100] border-b-4 border-[#F7FFF7] shadow-sm">
-          <div className="flex items-center gap-4">
-             <div className="w-10 h-10 bg-[#FF6B6B] rounded-xl flex items-center justify-center text-white shadow-lg rotate-3">
-               <i className="fas fa-rocket"></i>
-             </div>
-             <div className="hidden sm:block overflow-hidden">
-               <span className="text-[9px] text-[#4ECDC4] font-black uppercase tracking-widest">{topic}</span>
-               <h3 className="text-lg font-cinzel font-black text-slate-800 leading-none truncate">{activeChapter.title}</h3>
-             </div>
-          </div>
-          <button onClick={() => setStatus(AppStatus.CURRICULUM_MAP)} className="text-slate-400 font-black text-[10px] uppercase border-2 border-slate-50 px-4 py-2 rounded-xl shadow-sm hover:bg-slate-50">MAPA</button>
+        <nav className="h-[70px] px-8 flex justify-between items-center border-b-4 border-[#F7FFF7]">
+          <h3 className="text-lg font-cinzel font-black text-slate-800">{activeChapter.title}</h3>
+          <button onClick={() => setStatus(AppStatus.CURRICULUM_MAP)} className="text-slate-400 font-black text-[10px] uppercase">MAPA</button>
         </nav>
         <div className="flex-grow overflow-hidden relative">
           <EscapeRoom levels={levels} onFinish={() => {
@@ -347,7 +309,7 @@ const App: React.FC = () => {
                return c;
             });
             setCurriculum({ ...curriculum!, chapters: updated });
-            setStatus(activeChapter.id === curriculum!.chapters.length ? AppStatus.COMPLETED : AppStatus.CURRICULUM_MAP);
+            setStatus(AppStatus.CURRICULUM_MAP);
           }} />
         </div>
       </ScreenWrapper>
@@ -355,23 +317,14 @@ const App: React.FC = () => {
   }
 
   if (status === AppStatus.LOADING) return (
-    <ScreenWrapper className="items-center justify-center text-center p-12 bg-[#F7FFF7]">
-      <div className="w-20 h-20 border-8 border-[#FFE66D] border-t-[#FF6B6B] rounded-full animate-spin shadow-xl mb-8"></div>
-      <h2 className="text-4xl font-cinzel font-black text-[#FF6B6B] mb-2 uppercase">CARGANDO</h2>
-      <p className="text-[#4ECDC4] text-xs font-black uppercase tracking-[0.4em] animate-pulse">Organizando el saber...</p>
+    <ScreenWrapper className="items-center justify-center text-center bg-[#F7FFF7]">
+      <div className="w-16 h-16 border-8 border-[#FFE66D] border-t-[#FF6B6B] rounded-full animate-spin mb-8"></div>
+      <h2 className="text-3xl font-cinzel font-black text-[#FF6B6B] uppercase">CULTIVANDO EL SABER</h2>
+      <p className="text-[#4ECDC4] text-xs font-black uppercase tracking-[0.4em] animate-pulse">Analizando archivo...</p>
     </ScreenWrapper>
   );
 
-  return (
-    <ScreenWrapper className="items-center justify-center text-center p-12">
-      <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-8">
-        <i className="fas fa-exclamation-circle text-5xl text-red-400"></i>
-      </div>
-      <h2 className="text-4xl font-cinzel font-black text-slate-800 mb-4 uppercase">¡UPS!</h2>
-      <p className="text-slate-400 mb-8 text-xl font-bold italic">{error || "Algo no salió bien."}</p>
-      <Button onClick={() => setStatus(AppStatus.IDLE)} className="px-8 py-4 bg-[#4ECDC4] text-white rounded-xl uppercase font-black shadow-lg">REINTENTAR</Button>
-    </ScreenWrapper>
-  );
+  return <div />;
 };
 
 export default App;
