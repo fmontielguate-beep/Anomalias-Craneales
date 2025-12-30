@@ -39,13 +39,13 @@ export enum AppStatus {
   IDLE = 'IDLE',
   LOADING = 'LOADING',
   CURRICULUM_MAP = 'CURRICULUM_MAP',
-  PREVIEW = 'PREVIEW', // Nuevo estado de evaluación
+  PREVIEW = 'PREVIEW',
   PLAYING = 'PLAYING',
   COMPLETED = 'COMPLETED',
   ERROR = 'ERROR'
 }
 
-export type SourceType = 'text' | 'pdf' | 'youtube' | 'search' | 'video';
+export type SourceType = 'text' | 'pdf'; // Solo PDF y Texto para máxima fluidez
 
 export interface FileData {
   data: string;

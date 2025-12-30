@@ -64,12 +64,11 @@ const App: React.FC = () => {
       const syllabus = await generateCurriculum(
         topic || "Misión de Aprendizaje",
         inputValue,
-        sourceType === 'search' || sourceType === 'youtube',
         selectedFileData || undefined
       );
       
       if (!syllabus?.chapters || syllabus.chapters.length === 0) {
-        throw new Error("La IA no pudo organizar el contenido.");
+        throw new Error("No se pudo procesar el contenido.");
       }
 
       syllabus.chapters = syllabus.chapters.map((c, i) => ({
@@ -81,15 +80,8 @@ const App: React.FC = () => {
       setTopic(syllabus.topic);
       setStatus(AppStatus.CURRICULUM_MAP);
     } catch (err: any) {
-      console.error("Detailed Error:", err);
-      const msg = err.message?.toLowerCase();
-      if (msg?.includes("api key") || msg?.includes("invalid key")) {
-        setError("Error de configuración de servidor. Verifica la API Key en Netlify.");
-      } else if (msg?.includes("parsing") || msg?.includes("json")) {
-        setError("Error leyendo el conocimiento. Intenta con otro PDF.");
-      } else {
-        setError("No se pudo procesar el material. Prueba con un texto más breve o un PDF diferente.");
-      }
+      console.error("Error:", err);
+      setError("Error de conexión o formato de PDF. Asegúrate de que el archivo sea legible.");
       setStatus(AppStatus.IDLE);
     } finally {
       setIsProcessing(false);
@@ -108,18 +100,17 @@ const App: React.FC = () => {
         topic,
         chapter,
         inputValue,
-        sourceType === 'search' || sourceType === 'youtube',
         selectedFileData || undefined,
         isTrialMode
       );
       
-      if (!chapterLevels || chapterLevels.length === 0) throw new Error("No se generaron desafíos.");
+      if (!chapterLevels || chapterLevels.length === 0) throw new Error("Vacio");
       
       setLevels(chapterLevels);
       setStatus(AppStatus.PREVIEW);
     } catch (err: any) {
-      console.error("Level Generation Error:", err);
-      setError("No se pudieron construir los desafíos de esta sala.");
+      console.error("Levels Error:", err);
+      setError("No se pudieron generar los niveles. Intenta nuevamente.");
       setStatus(AppStatus.ERROR);
     } finally {
       setIsProcessing(false);
@@ -202,19 +193,19 @@ const App: React.FC = () => {
 
           <div className="text-center mb-8 flex-shrink-0">
             <h1 className="text-6xl md:text-7xl font-cinzel font-black shimmer-text leading-none mb-2">EduEscape</h1>
-            <p className="text-slate-400 text-base font-bold italic">Selecciona tu material de estudio.</p>
+            <p className="text-slate-400 text-base font-bold italic">Sube un PDF para jugar.</p>
           </div>
 
           <form onSubmit={handleCreateCurriculum} className="flex-grow flex flex-col justify-center space-y-8 max-w-2xl mx-auto w-full relative z-10 overflow-hidden">
-            <div className="flex justify-center gap-3 flex-wrap flex-shrink-0">
-              {(['pdf', 'youtube', 'search', 'text'] as SourceType[]).map((type) => (
+            <div className="flex justify-center gap-3 flex-shrink-0">
+              {(['pdf', 'text'] as SourceType[]).map((type) => (
                 <button 
                   key={type} 
                   type="button" 
                   onClick={() => { setSourceType(type); setError(''); setSelectedFileData(null); setTopic(''); }}
-                  className={`px-6 py-2 rounded-xl font-black text-[10px] border-2 transition-all ${sourceType === type ? 'bg-[#FF6B6B] border-white text-white shadow-lg scale-105' : 'bg-white border-slate-50 text-slate-300 hover:text-slate-500'}`}
+                  className={`px-8 py-3 rounded-2xl font-black text-xs border-4 transition-all ${sourceType === type ? 'bg-[#FF6B6B] border-white text-white shadow-lg scale-105' : 'bg-white border-slate-100 text-slate-300'}`}
                 >
-                  {type.toUpperCase()}
+                  {type === 'pdf' ? 'ARCHIVO PDF' : 'TEXTO LIBRE'}
                 </button>
               ))}
             </div>
@@ -237,17 +228,17 @@ const App: React.FC = () => {
                   <div className="w-16 h-16 bg-[#6C5CE7] text-white rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg">
                     <i className="fas fa-file-upload text-2xl"></i>
                   </div>
-                  <p className="text-xl font-black text-slate-800 line-clamp-2 px-4">{topic || "Arrastra tu PDF aquí"}</p>
-                  {error && <p className="text-red-500 text-[10px] font-black mt-2 uppercase">{error}</p>}
+                  <p className="text-xl font-black text-slate-800 line-clamp-2 px-4">{topic || "Selecciona tu PDF"}</p>
                 </div>
               ) : (
-                <textarea required value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="Pega el contenido o enlace aquí..." className="flex-grow bg-[#F7FFF7] border-2 border-white rounded-[2rem] px-6 py-4 text-lg shadow-inner outline-none focus:border-[#4ECDC4] transition-all resize-none font-medium" />
+                <textarea required value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="Pega aquí el contenido que quieres estudiar..." className="flex-grow bg-[#F7FFF7] border-2 border-white rounded-[2rem] px-6 py-4 text-lg shadow-inner outline-none focus:border-[#4ECDC4] transition-all resize-none font-medium" />
               )}
             </div>
 
             <Button type="submit" disabled={isProcessing || (sourceType === 'pdf' && !selectedFileData)} className="w-full py-6 text-2xl font-black rounded-[2rem] bg-[#FF6B6B] text-white shadow-xl btn-joy flex-shrink-0 uppercase">
-              {isProcessing ? "PROCESANDO..." : "GENERAR JUEGO"}
+              {isProcessing ? "CONSTRUYENDO..." : "CREAR JUEGO"}
             </Button>
+            {error && <p className="text-red-500 text-center text-[10px] font-black uppercase mt-2">{error}</p>}
           </form>
         </div>
       </ScreenWrapper>
@@ -263,7 +254,7 @@ const App: React.FC = () => {
               <span className="bg-[#FFD93D] px-4 py-1 rounded-full font-black text-[10px] uppercase shadow-sm">MAPA DE MISIONES</span>
               <h1 className="text-4xl md:text-5xl font-cinzel font-black text-slate-800 mt-2 truncate max-w-md">{topic}</h1>
             </div>
-            <Button onClick={() => setStatus(AppStatus.IDLE)} variant="secondary" className="rounded-xl px-4 py-3 font-black text-[10px] uppercase border-2 shadow-sm">VOLVER</Button>
+            <Button onClick={() => setStatus(AppStatus.IDLE)} variant="secondary" className="rounded-xl px-4 py-3 font-black text-[10px] uppercase border-2 shadow-sm">NUEVO PDF</Button>
           </header>
 
           <div className="flex-grow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scroll pb-6">
@@ -349,8 +340,8 @@ const App: React.FC = () => {
   if (status === AppStatus.LOADING) return (
     <ScreenWrapper className="items-center justify-center text-center p-12 bg-[#F7FFF7]">
       <div className="w-20 h-20 border-8 border-[#FFE66D] border-t-[#FF6B6B] rounded-full animate-spin shadow-xl mb-8"></div>
-      <h2 className="text-4xl font-cinzel font-black text-[#FF6B6B] mb-2 uppercase">GENERANDO</h2>
-      <p className="text-[#4ECDC4] text-xs font-black uppercase tracking-[0.4em] animate-pulse">Invocando el saber...</p>
+      <h2 className="text-4xl font-cinzel font-black text-[#FF6B6B] mb-2 uppercase">CARGANDO</h2>
+      <p className="text-[#4ECDC4] text-xs font-black uppercase tracking-[0.4em] animate-pulse">Organizando el saber...</p>
     </ScreenWrapper>
   );
 
@@ -360,7 +351,7 @@ const App: React.FC = () => {
         <i className="fas fa-exclamation-circle text-5xl text-red-400"></i>
       </div>
       <h2 className="text-4xl font-cinzel font-black text-slate-800 mb-4 uppercase">¡UPS!</h2>
-      <p className="text-slate-400 mb-8 text-xl font-bold italic">{error || "Algo no salió según lo planeado."}</p>
+      <p className="text-slate-400 mb-8 text-xl font-bold italic">{error || "Algo no salió bien."}</p>
       <Button onClick={() => setStatus(AppStatus.IDLE)} className="px-8 py-4 bg-[#4ECDC4] text-white rounded-xl uppercase font-black shadow-lg">REINTENTAR</Button>
     </ScreenWrapper>
   );
